@@ -1,0 +1,1 @@
+This is a clone of https://github.com/thethirdone/jsoftfloat/ made just to simplify building the lib, ideally i'd want this to be a submodule instead
