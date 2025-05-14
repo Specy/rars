@@ -1,6 +1,6 @@
-package rars;
+package app.specy.rars;
 
-import rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.AddressErrorException;
 
 /**
  * Exceptions that cannot be handled and must result in the ending of the simulation

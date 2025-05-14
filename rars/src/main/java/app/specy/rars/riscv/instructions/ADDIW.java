@@ -1,4 +1,4 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
 public class ADDIW extends ImmediateInstruction {
     public ADDIW() {

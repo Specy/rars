@@ -1,4 +1,4 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

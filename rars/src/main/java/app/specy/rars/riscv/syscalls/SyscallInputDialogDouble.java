@@ -1,12 +1,12 @@
-package rars.riscv.syscalls;
+package app.specy.rars.riscv.syscalls;
 
-import rars.Globals;
-import rars.ExitingException;
-import rars.ProgramStatement;
-import rars.riscv.hardware.AddressErrorException;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.AbstractSyscall;
+import app.specy.rars.Globals;
+import app.specy.rars.ExitingException;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.AbstractSyscall;
 
 import javax.swing.*;
 

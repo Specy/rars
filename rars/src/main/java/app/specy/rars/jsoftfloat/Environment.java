@@ -1,4 +1,4 @@
-package jsoftfloat;
+package app.specy.rars.jsoftfloat;
 
 import java.util.EnumSet;
 

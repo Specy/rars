@@ -1,6 +1,6 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
-import rars.Globals;
+import app.specy.rars.Globals;
 
 import java.util.ArrayList;
 import java.util.Iterator;

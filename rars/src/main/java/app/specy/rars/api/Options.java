@@ -1,4 +1,4 @@
-package rars.api;
+package app.specy.rars.api;
 
 public class Options {
     public boolean pseudo;            // pseudo instructions allowed in source code or not.

@@ -1,4 +1,4 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
 /**
  * A register which aliases a subset of another register

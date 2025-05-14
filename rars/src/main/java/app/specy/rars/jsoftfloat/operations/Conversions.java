@@ -1,9 +1,9 @@
-package jsoftfloat.operations;
+package app.specy.rars.jsoftfloat.operations;
 
-import jsoftfloat.Environment;
-import jsoftfloat.Flags;
-import jsoftfloat.internal.ExactFloat;
-import jsoftfloat.types.Floating;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.Flags;
+import app.specy.rars.jsoftfloat.internal.ExactFloat;
+import app.specy.rars.jsoftfloat.types.Floating;
 
 import java.math.BigInteger;
 

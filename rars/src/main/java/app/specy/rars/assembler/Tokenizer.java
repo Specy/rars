@@ -1,6 +1,6 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.*;
+import app.specy.rars.*;
 
 import java.io.File;
 import java.util.ArrayList;

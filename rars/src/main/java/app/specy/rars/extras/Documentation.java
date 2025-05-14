@@ -1,9 +1,9 @@
-package rars.extras;
+package app.specy.rars.extras;
 
-import rars.Globals;
-import rars.Settings;
-import rars.assembler.Directives;
-import rars.riscv.*;
+import app.specy.rars.Globals;
+import app.specy.rars.Settings;
+import app.specy.rars.assembler.Directives;
+import app.specy.rars.riscv.*;
 
 import java.util.ArrayList;
 import java.util.Collections;

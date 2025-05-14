@@ -1,4 +1,4 @@
-package rars;
+package app.specy.rars;
 
 import java.util.ArrayList;
 /*

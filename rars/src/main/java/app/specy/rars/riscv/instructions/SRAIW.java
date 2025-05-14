@@ -1,10 +1,10 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.ProgramStatement;
-import rars.riscv.InstructionSet;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
 
 public class SRAIW extends BasicInstruction {
     public SRAIW() {

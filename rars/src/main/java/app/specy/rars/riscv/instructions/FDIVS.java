@@ -1,8 +1,8 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import jsoftfloat.Environment;
-import jsoftfloat.types.Float32;
-import rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float32;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

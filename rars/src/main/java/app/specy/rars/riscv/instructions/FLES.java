@@ -1,13 +1,13 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import jsoftfloat.Environment;
-import jsoftfloat.types.Float32;
-import rars.ProgramStatement;
-import rars.riscv.hardware.ControlAndStatusRegisterFile;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float32;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

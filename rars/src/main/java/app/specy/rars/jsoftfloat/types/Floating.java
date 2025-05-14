@@ -1,7 +1,7 @@
-package jsoftfloat.types;
+package app.specy.rars.jsoftfloat.types;
 
-import jsoftfloat.Environment;
-import jsoftfloat.internal.ExactFloat;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.internal.ExactFloat;
 
 /**
  * General classifications that any floating point class needs to provide.

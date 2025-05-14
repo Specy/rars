@@ -1,6 +1,6 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
-import rars.util.Binary;
+import app.specy.rars.util.Binary;
 
 import java.util.Observer;
 

@@ -1,9 +1,9 @@
-package rars;
+package app.specy.rars;
 
-import rars.riscv.hardware.AddressErrorException;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.Instruction;
-import rars.util.Binary;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.Binary;
 
 /**
  * For exceptions thrown during runtime

@@ -1,4 +1,4 @@
-package rars.riscv.syscalls;
+package app.specy.rars.riscv.syscalls;
 
 
 import javax.sound.midi.*;

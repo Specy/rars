@@ -1,13 +1,13 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.*;
-import rars.riscv.hardware.AddressErrorException;
-import rars.riscv.hardware.Memory;
-import rars.riscv.BasicInstruction;
-import rars.riscv.ExtendedInstruction;
-import rars.riscv.Instruction;
-import rars.util.Binary;
-import rars.util.SystemIO;
+import app.specy.rars.*;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.Memory;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.ExtendedInstruction;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.Binary;
+import app.specy.rars.util.SystemIO;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

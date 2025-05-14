@@ -1,11 +1,11 @@
-package rars.riscv.dump;
+package app.specy.rars.riscv.dump;
 
-import rars.Globals;
-import rars.ProgramStatement;
-import rars.Settings;
-import rars.riscv.hardware.AddressErrorException;
-import rars.riscv.hardware.Memory;
-import rars.util.Binary;
+import app.specy.rars.Globals;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.Settings;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.Memory;
+import app.specy.rars.util.Binary;
 
 import java.io.File;
 import java.io.FileOutputStream;

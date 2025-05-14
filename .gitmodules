@@ -1,4 +1,0 @@
-[submodule "rars/src/main/java/jsoftfloat"]
-	path = rars/src/main/java/jsoftfloat
-	url = https://github.com/thethirdone/jsoftfloat/
-	branch = submodule

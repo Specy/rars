@@ -1,11 +1,11 @@
-package rars;
+package app.specy.rars;
 
-import rars.assembler.SymbolTable;
-import rars.riscv.hardware.Memory;
-import rars.riscv.InstructionSet;
-import rars.riscv.SyscallNumberOverride;
-import rars.util.PropertiesFile;
-import rars.venus.VenusUI;
+import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.riscv.hardware.Memory;
+import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.SyscallNumberOverride;
+import app.specy.rars.util.PropertiesFile;
+import app.specy.rars.venus.VenusUI;
 
 import java.util.ArrayList;
 import java.util.Enumeration;

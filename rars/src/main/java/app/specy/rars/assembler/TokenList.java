@@ -1,4 +1,4 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
 import java.util.ArrayList;
 import java.util.Iterator;

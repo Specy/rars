@@ -1,12 +1,12 @@
-package rars.simulator;
+package app.specy.rars.simulator;
 
-import rars.*;
-import rars.riscv.hardware.*;
-import rars.riscv.BasicInstruction;
-import rars.riscv.Instruction;
-import rars.util.Binary;
-import rars.util.SystemIO;
-import rars.venus.run.RunSpeedPanel;
+import app.specy.rars.*;
+import app.specy.rars.riscv.hardware.*;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.Binary;
+import app.specy.rars.util.SystemIO;
+import app.specy.rars.venus.run.RunSpeedPanel;
 
 import javax.swing.*;
 import java.util.ArrayList;

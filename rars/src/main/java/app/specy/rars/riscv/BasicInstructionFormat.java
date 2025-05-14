@@ -1,4 +1,4 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
 /*
 Copyright (c) 2017-2019,  Benjamin Landers

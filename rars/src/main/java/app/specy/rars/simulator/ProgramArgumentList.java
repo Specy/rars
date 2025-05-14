@@ -1,9 +1,9 @@
-package rars.simulator;
+package app.specy.rars.simulator;
 
-import rars.Globals;
-import rars.riscv.hardware.AddressErrorException;
-import rars.riscv.hardware.Memory;
-import rars.riscv.hardware.RegisterFile;
+import app.specy.rars.Globals;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.Memory;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
 import java.util.ArrayList;
 import java.util.StringTokenizer;

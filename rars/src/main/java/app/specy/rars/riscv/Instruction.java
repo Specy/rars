@@ -1,8 +1,8 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
-import rars.AssemblyException;
-import rars.assembler.TokenList;
-import rars.assembler.Tokenizer;
+import app.specy.rars.AssemblyException;
+import app.specy.rars.assembler.TokenList;
+import app.specy.rars.assembler.Tokenizer;
 
 import java.util.StringTokenizer;
 

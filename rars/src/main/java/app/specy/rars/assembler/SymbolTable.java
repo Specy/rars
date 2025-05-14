@@ -1,8 +1,8 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.ErrorList;
-import rars.ErrorMessage;
-import rars.Globals;
+import app.specy.rars.ErrorList;
+import app.specy.rars.ErrorMessage;
+import app.specy.rars.Globals;
 
 import java.util.ArrayList;
 

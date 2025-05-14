@@ -1,4 +1,4 @@
-package jsoftfloat;
+package app.specy.rars.jsoftfloat;
 
 /**
  * The different ways that rounding can be performed

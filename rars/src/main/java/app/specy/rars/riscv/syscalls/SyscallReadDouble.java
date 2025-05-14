@@ -1,10 +1,10 @@
-package rars.riscv.syscalls;
+package app.specy.rars.riscv.syscalls;
 
-import rars.ExitingException;
-import rars.ProgramStatement;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.AbstractSyscall;
-import rars.util.SystemIO;
+import app.specy.rars.ExitingException;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.util.SystemIO;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

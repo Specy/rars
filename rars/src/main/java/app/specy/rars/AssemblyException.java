@@ -1,4 +1,4 @@
-package rars;
+package app.specy.rars;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

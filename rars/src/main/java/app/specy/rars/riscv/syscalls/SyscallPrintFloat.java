@@ -1,9 +1,9 @@
-package rars.riscv.syscalls;
+package app.specy.rars.riscv.syscalls;
 
-import rars.ProgramStatement;
-import rars.riscv.AbstractSyscall;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.util.SystemIO;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.util.SystemIO;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

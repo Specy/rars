@@ -1,4 +1,4 @@
-package rars.simulator;
+package app.specy.rars.simulator;
 
 /*
 Copyright (c) 2003-2009,  Pete Sanderson and Kenneth Vollmar
@@ -28,8 +28,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 (MIT license, http://www.opensource.org/licenses/mit-license.html)
  */
 
-import rars.SimulationException;
-import rars.venus.run.RunSpeedPanel;
+import app.specy.rars.SimulationException;
+import app.specy.rars.venus.run.RunSpeedPanel;
 
 /**
  * Object provided to Observers of the Simulator.

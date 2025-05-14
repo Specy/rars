@@ -1,4 +1,4 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
 /*
 Copyright (c) 2003-2013,  Pete Sanderson and Kenneth Vollmar
@@ -28,8 +28,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 (MIT license, http://www.opensource.org/licenses/mit-license.html)
  */
 
-import rars.ProgramStatement;
-import rars.SimulationException;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.SimulationException;
 
 /**
  * Class to represent a basic instruction in the MIPS instruction set.

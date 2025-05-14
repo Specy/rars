@@ -1,7 +1,7 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.Globals;
-import rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.Globals;
+import app.specy.rars.riscv.hardware.AddressErrorException;
 
 public class LD extends Load {
     public LD() {

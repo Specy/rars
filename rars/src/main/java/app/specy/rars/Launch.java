@@ -1,17 +1,17 @@
-package rars;
+package app.specy.rars;
 
-import rars.api.Program;
-import rars.riscv.InstructionSet;
-import rars.riscv.dump.DumpFormat;
-import rars.riscv.dump.DumpFormatLoader;
-import rars.riscv.hardware.*;
-import rars.simulator.ProgramArgumentList;
-import rars.simulator.Simulator;
-import rars.util.Binary;
-import rars.util.FilenameFinder;
-import rars.util.MemoryDump;
-import rars.venus.VenusUI;
-import rars.api.Options;
+import app.specy.rars.api.Program;
+import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.dump.DumpFormat;
+import app.specy.rars.riscv.dump.DumpFormatLoader;
+import app.specy.rars.riscv.hardware.*;
+import app.specy.rars.simulator.ProgramArgumentList;
+import app.specy.rars.simulator.Simulator;
+import app.specy.rars.util.Binary;
+import app.specy.rars.util.FilenameFinder;
+import app.specy.rars.util.MemoryDump;
+import app.specy.rars.venus.VenusUI;
+import app.specy.rars.api.Options;
 
 import javax.swing.*;
 import java.io.File;

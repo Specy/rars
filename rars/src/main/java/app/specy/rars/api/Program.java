@@ -1,10 +1,10 @@
-package rars.api;
+package app.specy.rars.api;
 
-import rars.*;
-import rars.riscv.hardware.*;
-import rars.simulator.ProgramArgumentList;
-import rars.simulator.Simulator;
-import rars.util.SystemIO;
+import app.specy.rars.*;
+import app.specy.rars.riscv.hardware.*;
+import app.specy.rars.simulator.ProgramArgumentList;
+import app.specy.rars.simulator.Simulator;
+import app.specy.rars.util.SystemIO;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

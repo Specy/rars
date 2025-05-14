@@ -1,9 +1,9 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
-import rars.RISCVprogram;
-import rars.assembler.Symbol;
-import rars.assembler.TokenList;
-import rars.util.Binary;
+import app.specy.rars.RISCVprogram;
+import app.specy.rars.assembler.Symbol;
+import app.specy.rars.assembler.TokenList;
+import app.specy.rars.util.Binary;
 
 import java.util.ArrayList;
 import java.util.StringTokenizer;

@@ -1,7 +1,7 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
-import rars.Globals;
-import rars.util.FilenameFinder;
+import app.specy.rars.Globals;
+import app.specy.rars.util.FilenameFinder;
 
 import java.util.ArrayList;
 import java.util.HashSet;

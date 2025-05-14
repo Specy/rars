@@ -1,12 +1,12 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import jsoftfloat.Environment;
-import jsoftfloat.types.Float64;
-import rars.ProgramStatement;
-import rars.SimulationException;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
-import rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float64;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 
 /**
  * Helper class for 4 argument floating point instructions

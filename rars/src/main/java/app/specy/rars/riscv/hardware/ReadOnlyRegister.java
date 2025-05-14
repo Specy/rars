@@ -1,4 +1,4 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
 public class ReadOnlyRegister extends Register {
     public ReadOnlyRegister(String name, int num, int val) {

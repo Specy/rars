@@ -1,11 +1,11 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
-import rars.Globals;
-import rars.ProgramStatement;
-import rars.Settings;
-import rars.SimulationException;
-import rars.riscv.Instruction;
-import rars.util.Binary;
+import app.specy.rars.Globals;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.Settings;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.Binary;
 
 import java.util.Collection;
 import java.util.Observable;

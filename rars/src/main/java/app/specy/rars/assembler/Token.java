@@ -1,6 +1,6 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.RISCVprogram;
+import app.specy.rars.RISCVprogram;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar

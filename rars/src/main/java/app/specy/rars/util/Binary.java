@@ -1,6 +1,6 @@
-package rars.util;
+package app.specy.rars.util;
 
-import rars.Globals;
+import app.specy.rars.Globals;
 
 import java.util.Arrays;
 

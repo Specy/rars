@@ -1,7 +1,7 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import jsoftfloat.Environment;
-import jsoftfloat.types.Float64;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float64;
 
 public class FMIND extends Double {
     public FMIND() {

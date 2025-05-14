@@ -1,4 +1,4 @@
-package rars;
+package app.specy.rars;
 
 /**
  * Exception to trigger the simulator to wait for an interrupt; used in WFI

@@ -1,10 +1,10 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.BreakpointException;
-import rars.ProgramStatement;
-import rars.SimulationException;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
+import app.specy.rars.BreakpointException;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

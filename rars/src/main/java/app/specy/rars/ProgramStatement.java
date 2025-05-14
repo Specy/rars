@@ -1,18 +1,18 @@
-package rars;
+package app.specy.rars;
 
-import rars.assembler.SymbolTable;
-import rars.assembler.Token;
-import rars.assembler.TokenList;
-import rars.assembler.TokenTypes;
-import rars.riscv.hardware.ControlAndStatusRegisterFile;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.hardware.Register;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
-import rars.riscv.Instruction;
-import rars.util.Binary;
-import rars.venus.NumberDisplayBaseChooser;
+import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.assembler.Token;
+import app.specy.rars.assembler.TokenList;
+import app.specy.rars.assembler.TokenTypes;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.Register;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.Binary;
+import app.specy.rars.venus.NumberDisplayBaseChooser;
 
 import java.util.ArrayList;
 

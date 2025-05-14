@@ -1,9 +1,9 @@
-package rars;
+package app.specy.rars;
 
-import rars.util.Binary;
-import rars.util.EditorFont;
-import rars.venus.editors.jeditsyntax.SyntaxStyle;
-import rars.venus.editors.jeditsyntax.SyntaxUtilities;
+import app.specy.rars.util.Binary;
+import app.specy.rars.util.EditorFont;
+import app.specy.rars.venus.editors.jeditsyntax.SyntaxStyle;
+import app.specy.rars.venus.editors.jeditsyntax.SyntaxUtilities;
 
 import javax.swing.*;
 import java.awt.*;

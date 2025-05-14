@@ -1,7 +1,7 @@
-package rars.util;
+package app.specy.rars.util;
 
-import rars.Globals;
-import rars.Settings;
+import app.specy.rars.Globals;
+import app.specy.rars.Settings;
 
 import java.io.*;
 import java.nio.channels.FileChannel;

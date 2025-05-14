@@ -1,6 +1,6 @@
-package rars.riscv.dump;
+package app.specy.rars.riscv.dump;
 
-import rars.util.FilenameFinder;
+import app.specy.rars.util.FilenameFinder;
 
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;

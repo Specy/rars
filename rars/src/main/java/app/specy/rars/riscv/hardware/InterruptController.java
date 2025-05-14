@@ -1,8 +1,8 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
-import rars.SimulationException;
-import rars.riscv.Instruction;
-import rars.simulator.Simulator;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.simulator.Simulator;
 
 /**
  * Manages the flow of interrupts to the processor

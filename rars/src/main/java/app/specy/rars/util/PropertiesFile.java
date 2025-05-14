@@ -1,4 +1,4 @@
-package rars.util;
+package app.specy.rars.util;
 
 import java.io.IOException;
 import java.io.InputStream;

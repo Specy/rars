@@ -1,10 +1,10 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.ErrorList;
-import rars.ErrorMessage;
-import rars.RISCVprogram;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.hardware.RegisterFile;
+import app.specy.rars.ErrorList;
+import app.specy.rars.ErrorMessage;
+import app.specy.rars.RISCVprogram;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
 import java.util.ArrayList;
 import java.util.Collections;

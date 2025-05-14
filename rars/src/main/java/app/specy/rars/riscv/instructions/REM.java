@@ -1,6 +1,6 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

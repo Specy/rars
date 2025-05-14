@@ -1,4 +1,4 @@
-package rars.util;
+package app.specy.rars.util;
 
 import javax.swing.filechooser.FileFilter;
 import java.io.File;

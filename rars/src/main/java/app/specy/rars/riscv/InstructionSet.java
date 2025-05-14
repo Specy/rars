@@ -1,13 +1,13 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
-import rars.Globals;
-import rars.ProgramStatement;
-import rars.Settings;
-import rars.SimulationException;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.syscalls.*;
-import rars.util.FilenameFinder;
-import rars.util.SystemIO;
+import app.specy.rars.Globals;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.Settings;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.syscalls.*;
+import app.specy.rars.util.FilenameFinder;
+import app.specy.rars.util.SystemIO;
 
 import java.io.BufferedReader;
 import java.io.IOException;

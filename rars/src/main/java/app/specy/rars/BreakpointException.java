@@ -1,4 +1,4 @@
-package rars;
+package app.specy.rars;
 
 /**
  * This exception is only used to trigger breakpoints for ebreak.

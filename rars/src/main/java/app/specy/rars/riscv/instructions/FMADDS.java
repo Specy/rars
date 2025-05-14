@@ -1,4 +1,4 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
 /*
 Copyright (c) 2017,  Benjamin Landers
@@ -27,8 +27,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 (MIT license, http://www.opensource.org/licenses/mit-license.html)
  */
 
-import jsoftfloat.Environment;
-import jsoftfloat.types.Float32;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float32;
 
 public class FMADDS extends FusedFloat {
     public FMADDS() {

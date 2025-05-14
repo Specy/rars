@@ -1,6 +1,6 @@
-package rars.riscv.syscalls;
+package app.specy.rars.riscv.syscalls;
 
-import rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
 import java.util.HashMap;
 import java.util.Random;

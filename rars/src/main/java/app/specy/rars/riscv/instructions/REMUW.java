@@ -1,4 +1,4 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
 public class REMUW extends ArithmeticW {
     public REMUW() {

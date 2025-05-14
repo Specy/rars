@@ -1,9 +1,9 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
-import rars.Globals;
-import rars.Settings;
-import rars.assembler.SymbolTable;
-import rars.riscv.Instruction;
+import app.specy.rars.Globals;
+import app.specy.rars.Settings;
+import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.riscv.Instruction;
 
 import java.util.Observer;
 

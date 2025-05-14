@@ -1,4 +1,4 @@
-package rars.riscv.hardware;
+package app.specy.rars.riscv.hardware;
 
 import java.util.Observable;
 

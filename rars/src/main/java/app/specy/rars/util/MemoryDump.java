@@ -1,6 +1,6 @@
-package rars.util;
+package app.specy.rars.util;
 
-import rars.riscv.hardware.Memory;
+import app.specy.rars.riscv.hardware.Memory;
 
 	/*
 Copyright (c) 2003-2009,  Pete Sanderson and Kenneth Vollmar

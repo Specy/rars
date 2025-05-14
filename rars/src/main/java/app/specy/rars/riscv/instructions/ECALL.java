@@ -1,11 +1,11 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.ProgramStatement;
-import rars.SimulationException;
-import rars.riscv.hardware.RegisterFile;
-import rars.riscv.BasicInstruction;
-import rars.riscv.BasicInstructionFormat;
-import rars.riscv.InstructionSet;
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.SimulationException;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
+import app.specy.rars.riscv.InstructionSet;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

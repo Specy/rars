@@ -1,9 +1,9 @@
-package jsoftfloat.internal;
+package app.specy.rars.jsoftfloat.internal;
 
 
-import jsoftfloat.Environment;
-import jsoftfloat.Flags;
-import jsoftfloat.RoundingMode;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.Flags;
+import app.specy.rars.jsoftfloat.RoundingMode;
 
 import java.math.BigInteger;
 

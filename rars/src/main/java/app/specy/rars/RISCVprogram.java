@@ -1,9 +1,9 @@
-package rars;
+package app.specy.rars;
 
-import rars.assembler.*;
-import rars.riscv.hardware.RegisterFile;
-import rars.simulator.BackStepper;
-import rars.simulator.Simulator;
+import app.specy.rars.assembler.*;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.simulator.BackStepper;
+import app.specy.rars.simulator.Simulator;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

@@ -1,11 +1,11 @@
-package rars.assembler;
+package app.specy.rars.assembler;
 
-import rars.Globals;
-import rars.riscv.hardware.ControlAndStatusRegisterFile;
-import rars.riscv.hardware.FloatingPointRegisterFile;
-import rars.riscv.hardware.Register;
-import rars.riscv.hardware.RegisterFile;
-import rars.util.Binary;
+import app.specy.rars.Globals;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.Register;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.util.Binary;
 
 	/*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar

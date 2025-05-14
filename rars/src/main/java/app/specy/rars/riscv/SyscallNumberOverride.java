@@ -1,4 +1,4 @@
-package rars.riscv;
+package app.specy.rars.riscv;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

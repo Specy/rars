@@ -1,4 +1,4 @@
-package jsoftfloat;
+package app.specy.rars.jsoftfloat;
 
 /**
  * Exception flags which can be set in certain conditions

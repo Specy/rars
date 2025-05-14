@@ -1,7 +1,7 @@
-package rars.riscv.instructions;
+package app.specy.rars.riscv.instructions;
 
-import rars.Globals;
-import rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.Globals;
+import app.specy.rars.riscv.hardware.AddressErrorException;
 
 /*
 Copyright (c) 2017,  Benjamin Landers
