@@ -1,11 +1,10 @@
 package app.specy.rars;
 
 import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.riscv.SyscallLoader;
 import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.InstructionSet;
 import app.specy.rars.riscv.SyscallNumberOverride;
-import app.specy.rars.util.PropertiesFile;
-import app.specy.rars.venus.VenusUI;
 
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -49,8 +48,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 public class Globals {
     // List these first because they are referenced by methods called at initialization.
-    private static String configPropertiesFile = "Config";
-    private static String syscallPropertiesFile = "Syscall";
+    private SyscallLoader syscallLoader;
+
+
+    public void setSyscallLoader(SyscallLoader loader) {
+        syscallLoader = loader;
+    }
 
     /**
      * The set of implemented instructions.

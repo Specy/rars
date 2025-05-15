@@ -5,15 +5,9 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.Settings;
 import app.specy.rars.SimulationException;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.instructions.*;
 import app.specy.rars.riscv.syscalls.*;
-import app.specy.rars.util.FilenameFinder;
 import app.specy.rars.util.SystemIO;
-
-//TODO was java.io import
-//TODO was java.io import
-//TODO was java.io import
-//TODO was java.io import
-import java.lang.reflect.Modifier;
 import java.util.*;
 
 	/*
@@ -54,9 +48,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class InstructionSet {
-    private static final String CLASS_PREFIX = "rars.riscv.instructions.";
-    private static final String INSTRUCTIONS_DIRECTORY_PATH = "rars/riscv/instructions";
-    private static final String CLASS_EXTENSION = "class";
     public static boolean rv64 = Globals.getSettings().getBooleanSetting(Settings.Bool.RV64_ENABLED);
 
     private ArrayList<Instruction> instructionList;
@@ -92,16 +83,10 @@ public class InstructionSet {
         // ////////////////////////////////////   BASIC INSTRUCTIONS START HERE ////////////////////////////////
 
         addBasicInstructions();
-
-        ////////////// READ PSEUDO-INSTRUCTION SPECS FROM DATA FILE AND ADD //////////////////////
-        if(rv64) {
-            addPseudoInstructions("/PseudoOps-64.txt");
-        }
-
-        addPseudoInstructions("/PseudoOps.txt");
+        addPseudoInstructions();
         // Initialization step.  Create token list for each instruction example.  This is
         // used by parser to determine user program correct syntax.
-        for (Instruction inst : instructionList) {
+            for (Instruction inst : instructionList) {
             inst.createExampleTokenList();
         }
 
@@ -133,90 +118,36 @@ public class InstructionSet {
         return null;
     }
 
-    private void addBasicInstructions() {
-        // grab all class files in the same directory as Syscall
-        ArrayList<String> candidates = FilenameFinder.getFilenameList(this.getClass().getClassLoader(),
-                INSTRUCTIONS_DIRECTORY_PATH, CLASS_EXTENSION);
-        HashSet<String> insts = new HashSet<>();
-        for (String file : candidates) {
-            // Do not add class if already encountered (happens if run in MARS development directory)
-            if (insts.contains(file)) {
-                continue;
-            } else {
-                insts.add(file);
-            }
-            try {
-                // grab the class, make sure it implements Syscall, instantiate, add to list
-                String syscallClassName = CLASS_PREFIX + file.substring(0, file.indexOf(CLASS_EXTENSION) - 1);
-                Class clas = Class.forName(syscallClassName);
-                if (!BasicInstruction.class.isAssignableFrom(clas) ||
-                        Modifier.isAbstract(clas.getModifiers()) ||
-                        Modifier.isInterface(clas.getModifiers())) {
-                    continue;
-                }
-                try {
-                    instructionList.add((BasicInstruction) clas.newInstance());
-                }catch (NullPointerException ne){
-                    if (ne.toString().contains("rv"))continue;
-                    throw ne;
-                }
-            } catch (Exception e) {
-                System.out.println("Error instantiating Instruction from file " + file + ": " + e);
-                System.exit(0);
-            }
-        }
-    }
     /*  METHOD TO ADD PSEUDO-INSTRUCTIONS
-    */
-    private void addPseudoInstructions(String file) {
-        InputStream is = null;
-        BufferedReader in = null;
-        try {
-            // leading "/" prevents package name being prepended to filepath.
-            is = this.getClass().getResourceAsStream(file);
-            in = new BufferedReader(new InputStreamReader(is));
-        } catch (NullPointerException e) {
-            System.out.println(
-                    "Error: Pseudo-instruction file PseudoOps.txt not found.");
-            System.exit(0);
-        }
-        try {
-            String line, pseudoOp, template, token;
-            String description;
-            StringTokenizer tokenizer;
-            while ((line = in.readLine()) != null) {
-                // skip over: comment lines, empty lines, lines starting with blank.
-                if (!line.startsWith("#") && !line.startsWith(" ")
-                        && line.length() > 0) {
-                    description = "";
-                    tokenizer = new StringTokenizer(line, ";");
-                    pseudoOp = tokenizer.nextToken();
-                    template = "";
-                    while (tokenizer.hasMoreTokens()) {
-                        token = tokenizer.nextToken();
-                        if (token.startsWith("#")) {
-                            // Optional description must be last token in the line.
-                            description = token.substring(1);
-                            break;
-                        }
-                        template = template + token;
-                        if (tokenizer.hasMoreTokens()) {
-                            template = template + "\n";
-                        }
+     */
+    private void addPseudoInstructions() {
+
+        String pseudoOp, template, token;
+        String description;
+        StringTokenizer tokenizer;
+        for (String line : PseudoOps.PSEUDO_OPS) {
+            // skip over: comment lines, empty lines, lines starting with blank.
+            if (!line.startsWith("#") && !line.startsWith(" ")
+                    && line.length() > 0) {
+                description = "";
+                tokenizer = new StringTokenizer(line, ";");
+                pseudoOp = tokenizer.nextToken();
+                template = "";
+                while (tokenizer.hasMoreTokens()) {
+                    token = tokenizer.nextToken();
+                    if (token.startsWith("#")) {
+                        // Optional description must be last token in the line.
+                        description = token.substring(1);
+                        break;
                     }
-                    instructionList.add(new ExtendedInstruction(pseudoOp, template, description));
-                    //if (firstTemplate != null) System.out.println("\npseudoOp: "+pseudoOp+"\ndefault template:\n"+firstTemplate+"\ncompact template:\n"+template);
+                    template = template + token;
+                    if (tokenizer.hasMoreTokens()) {
+                        template = template + "\n";
+                    }
                 }
+                instructionList.add(new ExtendedInstruction(pseudoOp, template, description));
+                //if (firstTemplate != null) System.out.println("\npseudoOp: "+pseudoOp+"\ndefault template:\n"+firstTemplate+"\ncompact template:\n"+template);
             }
-            in.close();
-        } catch (IOException ioe) {
-            System.out.println(
-                    "Internal Error: Pseudo-instructions could not be loaded.");
-            System.exit(0);
-        } catch (Exception ioe) {
-            System.out.println(
-                    "Internal Error: Invalid pseudo-instruction specification.");
-            System.exit(0);
         }
 
     }
@@ -243,6 +174,7 @@ public class InstructionSet {
 
 
     // TODO: check to see if autocomplete was accidentally removed
+
     /**
      * Given a string, will return the Instruction object(s) from the instruction
      * set whose operator mnemonic prefix matches it.  Case-insensitive.  For example
@@ -266,11 +198,11 @@ public class InstructionSet {
         return matchingInstructions;
     }
 
-   	/*
-        * Method to find and invoke a syscall given its service number.  Each syscall
-   	 * function is represented by an object in an array list.  Each object is of
-   	 * a class that implements Syscall or extends AbstractSyscall.
-   	 */
+    /*
+     * Method to find and invoke a syscall given its service number.  Each syscall
+     * function is represented by an object in an array list.  Each object is of
+     * a class that implements Syscall or extends AbstractSyscall.
+     */
 
     public static void findAndSimulateSyscall(int number, ProgramStatement statement)
             throws SimulationException {
@@ -298,37 +230,37 @@ public class InstructionSet {
                         number + " ", SimulationException.ENVIRONMENT_CALL);
     }
 
-   	/*
-        * Method to process a successful branch condition.  DO NOT USE WITH JUMP
-   	 * INSTRUCTIONS!  The branch operand is a relative displacement in words
-   	 * whereas the jump operand is an absolute address in bytes.
-   	 *
-   	 * The parameter is displacement operand from instruction.
-   	 */
+    /*
+     * Method to process a successful branch condition.  DO NOT USE WITH JUMP
+     * INSTRUCTIONS!  The branch operand is a relative displacement in words
+     * whereas the jump operand is an absolute address in bytes.
+     *
+     * The parameter is displacement operand from instruction.
+     */
 
     public static void processBranch(int displacement) {
         // Decrement needed because PC has already been incremented
         RegisterFile.setProgramCounter(RegisterFile.getProgramCounter() + displacement - Instruction.INSTRUCTION_LENGTH);
     }
 
-   	/*
-        * Method to process a jump.  DO NOT USE WITH BRANCH INSTRUCTIONS!
-   	 * The branch operand is a relative displacement in words
-   	 * whereas the jump operand is an absolute address in bytes.
-   	 *
-   	 * The parameter is jump target absolute byte address.
-   	 */
+    /*
+     * Method to process a jump.  DO NOT USE WITH BRANCH INSTRUCTIONS!
+     * The branch operand is a relative displacement in words
+     * whereas the jump operand is an absolute address in bytes.
+     *
+     * The parameter is jump target absolute byte address.
+     */
 
     public static void processJump(int targetAddress) {
         RegisterFile.setProgramCounter(targetAddress);
     }
 
-   	/*
-        * Method to process storing of a return address in the given
-   	 * register.  This is used only by the "and link"
-   	 * instructions: jal and jalr
-   	 * The parameter is register number to receive the return address.
-   	 */
+    /*
+     * Method to process storing of a return address in the given
+     * register.  This is used only by the "and link"
+     * instructions: jal and jalr
+     * The parameter is register number to receive the return address.
+     */
 
     public static void processReturnAddress(int register) {
         RegisterFile.updateRegister(register, RegisterFile.getProgramCounter());
@@ -366,6 +298,149 @@ public class InstructionSet {
             int match = instr & mask;
             return matchMap.get(match);
         }
+    }
+
+    private void addBasicInstructions() {
+        instructionList.add(new ADD());
+        instructionList.add(new ADDI());
+        instructionList.add(new ADDIW());
+        instructionList.add(new ADDW());
+        instructionList.add(new AND());
+        instructionList.add(new ANDI());
+        instructionList.add(new AUIPC());
+        instructionList.add(new BEQ());
+        instructionList.add(new BGE());
+        instructionList.add(new BGEU());
+        instructionList.add(new BLT());
+        instructionList.add(new BLTU());
+        instructionList.add(new BNE());
+        instructionList.add(new CSRRC());
+        instructionList.add(new CSRRCI());
+        instructionList.add(new CSRRS());
+        instructionList.add(new CSRRSI());
+        instructionList.add(new CSRRW());
+        instructionList.add(new CSRRWI());
+        instructionList.add(new DIV());
+        instructionList.add(new DIVU());
+        instructionList.add(new DIVUW());
+        instructionList.add(new DIVW());
+        instructionList.add(new EBREAK());
+        instructionList.add(new ECALL());
+        instructionList.add(new FADDD());
+        instructionList.add(new FADDS());
+        instructionList.add(new FCLASSD());
+        instructionList.add(new FCLASSS());
+        instructionList.add(new FCVTDL());
+        instructionList.add(new FCVTDLU());
+        instructionList.add(new FCVTDS());
+        instructionList.add(new FCVTDW());
+        instructionList.add(new FCVTDWU());
+        instructionList.add(new FCVTLD());
+        instructionList.add(new FCVTLS());
+        instructionList.add(new FCVTLUD());
+        instructionList.add(new FCVTLUS());
+        instructionList.add(new FCVTSD());
+        instructionList.add(new FCVTSL());
+        instructionList.add(new FCVTSLU());
+        instructionList.add(new FCVTSW());
+        instructionList.add(new FCVTSWU());
+        instructionList.add(new FCVTWD());
+        instructionList.add(new FCVTWS());
+        instructionList.add(new FCVTWUD());
+        instructionList.add(new FCVTWUS());
+        instructionList.add(new FDIVD());
+        instructionList.add(new FDIVS());
+        instructionList.add(new FENCE());
+        instructionList.add(new FENCEI());
+        instructionList.add(new FEQD());
+        instructionList.add(new FEQS());
+        instructionList.add(new FLD());
+        instructionList.add(new FLED());
+        instructionList.add(new FLES());
+        instructionList.add(new FLTD());
+        instructionList.add(new FLTS());
+        instructionList.add(new FLW());
+        instructionList.add(new FMADDD());
+        instructionList.add(new FMADDS());
+        instructionList.add(new FMAXD());
+        instructionList.add(new FMAXS());
+        instructionList.add(new FMIND());
+        instructionList.add(new FMINS());
+        instructionList.add(new FMSUBD());
+        instructionList.add(new FMSUBS());
+        instructionList.add(new FMULD());
+        instructionList.add(new FMULS());
+        instructionList.add(new FMVDX());
+        instructionList.add(new FMVSX());
+        instructionList.add(new FMVXD());
+        instructionList.add(new FMVXS());
+        instructionList.add(new FNMADDD());
+        instructionList.add(new FNMADDS());
+        instructionList.add(new FNMSUBD());
+        instructionList.add(new FNMSUBS());
+        instructionList.add(new FSD());
+        instructionList.add(new FSGNJD());
+        instructionList.add(new FSGNJND());
+        instructionList.add(new FSGNJNS());
+        instructionList.add(new FSGNJS());
+        instructionList.add(new FSGNJXD());
+        instructionList.add(new FSGNJXS());
+        instructionList.add(new FSQRTD());
+        instructionList.add(new FSQRTS());
+        instructionList.add(new FSUBD());
+        instructionList.add(new FSUBS());
+        instructionList.add(new FSW());
+        instructionList.add(new JAL());
+        instructionList.add(new JALR());
+        instructionList.add(new LB());
+        instructionList.add(new LBU());
+        instructionList.add(new LD());
+        instructionList.add(new LH());
+        instructionList.add(new LHU());
+        instructionList.add(new LUI());
+        instructionList.add(new LW());
+        instructionList.add(new LWU());
+        instructionList.add(new MUL());
+        instructionList.add(new MULH());
+        instructionList.add(new MULHSU());
+        instructionList.add(new MULHU());
+        instructionList.add(new MULW());
+        instructionList.add(new OR());
+        instructionList.add(new ORI());
+        instructionList.add(new REM());
+        instructionList.add(new REMU());
+        instructionList.add(new REMUW());
+        instructionList.add(new REMW());
+        instructionList.add(new SB());
+        instructionList.add(new SD());
+        instructionList.add(new SH());
+        instructionList.add(new SLL());
+        instructionList.add(new SLLI());
+        instructionList.add(new SLLI64());
+        instructionList.add(new SLLIW());
+        instructionList.add(new SLLW());
+        instructionList.add(new SLT());
+        instructionList.add(new SLTI());
+        instructionList.add(new SLTIU());
+        instructionList.add(new SLTU());
+        instructionList.add(new SRA());
+        instructionList.add(new SRAI());
+        instructionList.add(new SRAI64());
+        instructionList.add(new SRAIW());
+        instructionList.add(new SRAW());
+        instructionList.add(new SRL());
+        instructionList.add(new SRLI());
+        instructionList.add(new SRLI64());
+        instructionList.add(new SRLIW());
+        instructionList.add(new SRLW());
+        instructionList.add(new SUB());
+        instructionList.add(new SUBW());
+        instructionList.add(new SW());
+        instructionList.add(new URET());
+        instructionList.add(new WFI());
+        instructionList.add(new XOR());
+        instructionList.add(new XORI());
+
     }
 }
 
