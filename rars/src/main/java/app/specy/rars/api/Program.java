@@ -1,13 +1,15 @@
 package app.specy.rars.api;
 
 import app.specy.rars.*;
+import app.specy.rars.riscv.fs.MemoryFileSystem;
+import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.hardware.*;
 import app.specy.rars.simulator.ProgramArgumentList;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+//TODO was java.io import
+//TODO was java.io import
 import java.util.ArrayList;
 
 /**
@@ -68,8 +70,8 @@ public class Program {
      * @return A list of warnings generated if Options.warningsAreErrors is true, this will be empty
      * @throws AssemblyException thrown if any errors are found in the code
      */
-    public ErrorList assemble(ArrayList<String> files, String main) throws AssemblyException {
-        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(files,main, null);
+    public ErrorList assemble(String main, RISCVFileSystem files) throws AssemblyException {
+        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(main, files, null);
         return assemble(programs);
     }
 
@@ -80,11 +82,11 @@ public class Program {
      * @return A list of warnings generated if Options.warningsAreErrors is true, this will be empty
      * @throws AssemblyException thrown if any errors are found in the code
      */
-    public ErrorList assemble(String file) throws AssemblyException {
+    public ErrorList assemble(RISCVFile file) throws AssemblyException {
         // TODO: potentially inline prepareForAssembly
-        ArrayList<String> files = new ArrayList<>();
-        files.add(file);
-        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(files,file, null);
+        RISCVFileSystem fs = new MemoryFileSystem();
+        fs.create(file);
+        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(file.getName(), fs, null);
         return assemble(programs);
     }
 

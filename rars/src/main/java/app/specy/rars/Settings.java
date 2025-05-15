@@ -5,7 +5,7 @@ import app.specy.rars.util.EditorFont;
 import app.specy.rars.venus.editors.jeditsyntax.SyntaxStyle;
 import app.specy.rars.venus.editors.jeditsyntax.SyntaxUtilities;
 
-import javax.swing.*;
+
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Observable;

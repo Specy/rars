@@ -1,7 +1,7 @@
-package app.specy.mars.mips.io;
+package app.specy.rars.riscv.io;
 
-public class MIPSIOError extends Error {
-    public MIPSIOError(String message) {
+public class RISCVIOError extends Error {
+    public RISCVIOError(String message) {
         super(message);
     }
 }

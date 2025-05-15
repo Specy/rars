@@ -2,8 +2,9 @@ package app.specy.rars.util;
 
 import app.specy.rars.Globals;
 import app.specy.rars.Settings;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import java.io.*;
+//TODO was java.io import
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 
@@ -76,6 +77,13 @@ public class SystemIO {
     private static final int STDOUT = 1;
     private static final int STDERR = 2;
 
+
+    private static RISCVIO io;
+
+    public static void setRISCVIO(RISCVIO io) {
+        SystemIO.io = io;
+    }
+
     /**
      * Implements syscall to read an integer value.
      * Client is responsible for catching NumberFormatException.
@@ -85,29 +93,9 @@ public class SystemIO {
      */
 
     public static int readInteger(int serviceNumber) {
-        String input = readStringInternal("0", "Enter an integer value (syscall " + serviceNumber + ")", -1);
-        // Client is responsible for catching NumberFormatException
-        return Integer.parseInt(input.trim());
+        return io.readInt();
     }
 
-    private static String readStringInternal(String init, String prompt, int maxlength) {
-        String input = init;
-        if (Globals.getGui() == null) {
-            try {
-                input = getInputReader().readLine();
-                if (input == null)
-                    input = "";
-            } catch (IOException e) {
-            }
-        } else {
-            if (Globals.getSettings().getBooleanSetting(Settings.Bool.POPUP_SYSCALL_INPUT)) {
-                input = Globals.getGui().getMessagesPane().getInputString(prompt);
-            } else {
-                input = Globals.getGui().getMessagesPane().getInputString(maxlength);
-            }
-        }
-        return input;
-    }
 
     /**
      * Implements syscall to read a float value.
@@ -118,8 +106,8 @@ public class SystemIO {
      * Feb 14 2005 Ken Vollmar
      */
     public static float readFloat(int serviceNumber) {
-        String input = readStringInternal("0", "Enter a float value (syscall " + serviceNumber + ")", -1);
-        return Float.parseFloat(input.trim());
+        return io.readFloat();
+
     }
 
     /**
@@ -131,23 +119,15 @@ public class SystemIO {
      * Feb 14 2005 Ken Vollmar
      */
     public static double readDouble(int serviceNumber) {
-        String input = readStringInternal("0", "Enter a Double value (syscall " + serviceNumber + ")", -1);
-        return Double.parseDouble(input.trim());
+        return io.readDouble();
     }
+
 
     /**
      * Implements syscall having 4 in $v0, to print a string.
      */
     public static void printString(String string) {
-        if (Globals.getGui() == null) {
-            try {
-                SystemIO.getOutputWriter().write(string);
-                SystemIO.getOutputWriter().flush();
-            } catch (IOException e){
-            }
-        } else {
-            print2Gui(string);
-        }
+        io.printString(string);
     }
 
 
@@ -159,8 +139,8 @@ public class SystemIO {
      * @return the entered string, truncated to maximum length if necessary
      */
     public static String readString(int serviceNumber, int maxLength) {
-        String input = readStringInternal("", "Enter a string of maximum length " + maxLength
-                + " (syscall " + serviceNumber + ")", maxLength);
+        String input = io.readString();
+
         if (input.endsWith("\n")) {
             input = input.substring(0, input.length() - 1);
         }
@@ -181,8 +161,8 @@ public class SystemIO {
      */
     public static int readChar(int serviceNumber) {
         int returnValue = 0;
-
-        String input = readStringInternal("0", "Enter a character value (syscall " + serviceNumber + ")", 1);
+        char c = io.readChar();
+        String input = String.valueOf(c);
         // The whole try-catch is not really necessary in this case since I'm
         // just propagating the runtime exception (the default behavior), but
         // I want to make it explicit.  The client needs to catch it.
@@ -208,13 +188,7 @@ public class SystemIO {
      */
 
     public static int writeToFile(int fd, byte[] myBuffer, int lengthRequested) {
-        /////////////// DPS 8-Jan-2013  ////////////////////////////////////////////////////
-        /// Write to STDOUT or STDERR file descriptor while using IDE - write to Messages pane.
-        if ((fd == STDOUT || fd == STDERR) && Globals.getGui() != null) {
-            String data = new String(myBuffer, StandardCharsets.UTF_8); //decode the bytes using UTF-8 charset
-            print2Gui(data);
-            return myBuffer.length; // data.length would not count multi-byte characters
-        }
+
         ///////////////////////////////////////////////////////////////////////////////////
         //// When running in command mode, code below works for either regular file or STDOUT/STDERR
 

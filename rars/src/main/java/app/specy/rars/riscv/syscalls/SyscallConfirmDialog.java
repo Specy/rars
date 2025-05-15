@@ -4,8 +4,9 @@ import app.specy.rars.ExitingException;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -36,18 +37,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallConfirmDialog extends AbstractSyscall {
-    public SyscallConfirmDialog() {
+    RISCVIO io;
+    public SyscallConfirmDialog(RISCVIO io) {
         super("ConfirmDialog", "Service to display a message to user",
                 "a0 = address of null-terminated string that is the message to user",
                 "a0 = Yes (0), No (1), or Cancel(2)");
+        this.io = io;
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
         String message = NullString.get(statement);
-        int result = JOptionPane.showConfirmDialog(null, message);
-        if (result == JOptionPane.CLOSED_OPTION) {
-            result = JOptionPane.CANCEL_OPTION;
-        }
-        RegisterFile.updateRegister("a0", result);
+        RegisterFile.updateRegister("a0", this.io.confirm(message));
     }
 }

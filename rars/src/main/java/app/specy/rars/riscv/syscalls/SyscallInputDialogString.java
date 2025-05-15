@@ -6,8 +6,9 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 import java.nio.charset.StandardCharsets;
 
 /*
@@ -54,12 +55,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallInputDialogString extends AbstractSyscall {
-    public SyscallInputDialogString() {
+    RISCVIO io;
+
+    public SyscallInputDialogString(RISCVIO io) {
         super("InputDialogString","Service to display a message to a user and request a string input",
                 "a0 = address of null-terminated string that is the message to user<br>a1 = address of input buffer<br>"+
                         "a2 = maximum number of characters to read (including the terminating null)",
                 "a1 contains status value.<br> 0: OK status. Buffer contains the input string.<br>-2: Cancel was chosen. No change to buffer.<br>"+
                         "-3: OK was chosen but no data had been input into field. No change to buffer.<br>-4: length of the input string exceeded the specified maximum. Buffer contains the maximum allowable input string terminated with null.");
+        this.io = io;
+
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
@@ -70,7 +75,7 @@ public class SyscallInputDialogString extends AbstractSyscall {
         // An empty string returned (that is, inputString.length() of zero)
         // means that OK was chosen but no string was input.
         String inputString = null;
-        inputString = JOptionPane.showInputDialog(message);
+        inputString =  this.io.inputDialog(message);
         int byteAddress = RegisterFile.getValue("a1"); // byteAddress of string is in a1
         int maxLength = RegisterFile.getValue("a2"); // input buffer size for input string is in a2
 

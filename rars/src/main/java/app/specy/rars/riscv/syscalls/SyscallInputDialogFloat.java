@@ -5,8 +5,9 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -50,8 +51,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallInputDialogFloat extends AbstractSyscall {
-    public SyscallInputDialogFloat() {
+    RISCVIO io;
+
+    public SyscallInputDialogFloat(RISCVIO io) {
         super("InputDialogFloat");
+        this.io = io;
+
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
@@ -62,7 +67,7 @@ public class SyscallInputDialogFloat extends AbstractSyscall {
         // An empty string returned (that is, inputValue.length() of zero)
         // means that OK was chosen but no string was input.
         String inputValue = null;
-        inputValue = JOptionPane.showInputDialog(message);
+        inputValue = this.io.inputDialog(message);
 
         try {
             FloatingPointRegisterFile.setRegisterToFloat(0, (float) 0.0);  // set f0 to zero

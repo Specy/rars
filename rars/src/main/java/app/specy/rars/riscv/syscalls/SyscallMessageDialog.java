@@ -4,8 +4,9 @@ import app.specy.rars.ExitingException;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -36,11 +37,15 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallMessageDialog extends AbstractSyscall {
-    public SyscallMessageDialog() {
+    RISCVIO io;
+
+    public SyscallMessageDialog(RISCVIO io) {
         super("MessageDialog", "Service to display a message to user",
                 "a0 = address of null-terminated string that is the message to user <br>" +
                         "a1 = the type of the message to the user, which is one of:<br>"+
                         "0: error message <br>1: information message <br>2: warning message <br>3: question message <br>other: plain message", "N/A");
+        this.io = io;
+
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
@@ -48,6 +53,6 @@ public class SyscallMessageDialog extends AbstractSyscall {
         int msgType = RegisterFile.getValue("a1");
         if (msgType < 0 || msgType > 3)
             msgType = -1; // See values in http://java.sun.com/j2se/1.5.0/docs/api/constant-values.html
-        JOptionPane.showMessageDialog(null, NullString.get(statement), null, msgType);
+        this.io.outputDialog(NullString.get(statement), msgType);
     }
 }

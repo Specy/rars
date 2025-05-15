@@ -1,10 +1,13 @@
 package app.specy.rars.riscv;
 
 import app.specy.rars.Globals;
+import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.riscv.syscalls.*;
 import app.specy.rars.util.FilenameFinder;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -46,51 +49,65 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 public class SyscallLoader {
 
-    private static final String CLASS_PREFIX = "rars.riscv.syscalls.";
-    private static final String SYSCALLS_DIRECTORY_PATH = "rars/riscv/syscalls";
-    private static final String CLASS_EXTENSION = "class";
+    private RISCVIO io;
+
+    public SyscallLoader(RISCVIO io) {
+        this.io = io;
+        loadSyscalls();
+    }
 
     private static ArrayList<AbstractSyscall> syscallList;
 
-    /*
-       *  Dynamically loads Syscalls into an ArrayList.  This method is adapted from
-       *  the loadGameControllers() method in Bret Barker's GameServer class.
-       *  Barker (bret@hypefiend.com) is co-author of the book "Developing Games
-       *  in Java".  Also see the "loadMarsTools()" method from ToolLoader class.
-       */
-    static {
-        syscallList = new ArrayList<>();
-        // grab all class files in the same directory as Syscall
-        ArrayList<String> candidates = FilenameFinder.getFilenameList(SyscallLoader.class.getClassLoader(),
-                SYSCALLS_DIRECTORY_PATH, CLASS_EXTENSION);
-        HashSet<String> syscalls = new HashSet<>();
-        for (String file : candidates) {
-            // Do not add class if already encountered (happens if run in MARS development directory)
-            if (syscalls.contains(file)) {
-                continue;
-            } else {
-                syscalls.add(file);
-            }
-            try {
-                // grab the class, make sure it implements Syscall, instantiate, add to list
-                String syscallClassName = CLASS_PREFIX + file.substring(0, file.indexOf(CLASS_EXTENSION) - 1);
-                Class clas = Class.forName(syscallClassName);
-                if (!AbstractSyscall.class.isAssignableFrom(clas)) {
-                    continue;
-                }
-                AbstractSyscall syscall = (AbstractSyscall) clas.newInstance();
-                if (syscall.getNumber() == -1) {
-                    syscallList.add(syscall);
-                } else {
-                    throw new Exception("Syscalls must assign -1 for number");
-                }
-            } catch (Exception e) {
-                System.out.println("Error instantiating Syscall from file " + file + ": " + e);
-                System.exit(0);
-            }
-        }
+    SyscallLoader add(AbstractSyscall syscall) {
+        syscallList.add(syscall);
+        return this;
+    }
+
+    private void loadSyscalls() {
+        syscallList = new ArrayList<AbstractSyscall>();
+        add(new SyscallClose());
+        add(new SyscallConfirmDialog(io));
+        add(new SyscallExit());
+        add(new SyscallExit2());
+        add(new SyscallInputDialogDouble(io));
+        add(new SyscallInputDialogFloat(io));
+        add(new SyscallInputDialogInt(io));
+        add(new SyscallInputDialogString(io));
+        add(new SyscallMessageDialog(io));
+        add(new SyscallMessageDialogDouble(io));
+        add(new SyscallMessageDialogFloat(io));
+        add(new SyscallMessageDialogInt(io));
+        add(new SyscallMessageDialogString(io));
+
+        add(new SyscallOpen());
+        add(new SyscallPrintChar());
+        add(new SyscallPrintDouble());
+        add(new SyscallPrintFloat());
+        add(new SyscallPrintInt());
+        add(new SyscallPrintIntBinary());
+        add(new SyscallPrintIntHex());
+        add(new SyscallPrintIntUnsigned());
+        add(new SyscallPrintString());
+        add(new SyscallRandDouble());
+        add(new SyscallRandFloat());
+        add(new SyscallRandInt());
+        add(new SyscallRandIntRange());
+        add(new SyscallRead());
+        add(new SyscallWrite());
+        add(new SyscallReadChar());
+        add(new SyscallReadDouble());
+        add(new SyscallReadFloat());
+        add(new SyscallReadInt());
+        add(new SyscallReadString());
+        add(new SyscallSbrk());
+        add(new SyscallTime());
+
+        add(new SyscallGetCWD());
+        add(new SyscallLSeek());
+
         syscallList = processSyscallNumberOverrides(syscallList);
     }
+
 
     // Loads system call numbers from Syscall.properties
     private static ArrayList<AbstractSyscall> processSyscallNumberOverrides(ArrayList<AbstractSyscall> syscallList) {

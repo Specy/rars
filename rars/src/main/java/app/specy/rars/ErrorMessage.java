@@ -1,6 +1,5 @@
 package app.specy.rars;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -95,7 +94,7 @@ public class ErrorMessage {
                 this.filename = sourceProgram.getFilename();
                 this.line = line;
             } else {
-                rars.assembler.SourceLine sourceLine = sourceProgram.getSourceLineList().get(line - 1);
+                app.specy.rars.assembler.SourceLine sourceLine = sourceProgram.getSourceLineList().get(line - 1);
                 this.filename = sourceLine.getFilename();
                 this.line = sourceLine.getLineNumber();
             }
@@ -215,7 +214,7 @@ public class ErrorMessage {
     public String generateReport() {
         String out = ((isWarning) ? ErrorList.WARNING_MESSAGE_PREFIX : ErrorList.ERROR_MESSAGE_PREFIX) + ErrorList.FILENAME_PREFIX;
         if (getFilename().length() > 0)
-            out = out + (new File(getFilename()).getPath()); //.getName());
+            out = out + getFilename(); //.getName());
         if (getLine() > 0)
             out = out + ErrorList.LINE_PREFIX + getMacroExpansionHistory() + getLine();
         if (getPosition() > 0)

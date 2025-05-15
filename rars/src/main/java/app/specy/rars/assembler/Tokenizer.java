@@ -2,7 +2,7 @@ package app.specy.rars.assembler;
 
 import app.specy.rars.*;
 
-import java.io.File;
+//TODO was java.io import
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -138,8 +138,8 @@ public class Tokenizer {
                     String filename = tl.get(ii + 1).getValue();
                     filename = filename.substring(1, filename.length() - 1); // get rid of quotes
                     // Handle either absolute or relative pathname for .include file
-                    if (!new File(filename).isAbsolute()) {
-                        filename = new File(program.getFilename()).getParent() + File.separator + filename;
+                    if (!this.isPathAbsolute(filename)) {
+                        filename = this.getPathParent(program.getFilename()) + "/" + filename;
                     }
                     if (inclFiles.containsKey(filename)) {
                         // This is a recursive include.  Generate error message and return immediately.
@@ -188,6 +188,21 @@ public class Tokenizer {
             throw new AssemblyException(errors);
         }
         return result;
+    }
+
+    private boolean isPathAbsolute(String path){
+        return path.startsWith("/");
+    }
+
+    private String getPathParent(String path) {
+        if (path == null || path.isEmpty()) {
+            return null;
+        }
+        int lastSeparatorIndex = path.lastIndexOf('/');
+        if (lastSeparatorIndex == -1) {
+            return null;
+        }
+        return path.substring(0, lastSeparatorIndex);
     }
 
 

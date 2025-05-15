@@ -1,5 +1,6 @@
 package app.specy.rars;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import app.specy.rars.assembler.SymbolTable;
@@ -7,19 +8,20 @@ import app.specy.rars.assembler.TokenList;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.hardware.*;
-import app.specy.rars.riscv.instructions.Instruction;
-import app.specy.rars.riscv.instructions.InstructionSet;
-import app.specy.rars.riscv.instructions.SyscallLoader;
+import app.specy.rars.riscv.Instruction;
+import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.SyscallLoader;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.simulator.ProgramArgumentList;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
 public class RARS {
 
-    private List<RISCVprogram> programs;
+    private ArrayList<RISCVprogram> programs;
     private RISCVprogram main;
     private static RISCVIO io;
-    private boolean terminated = false;
+    private Simulator.Reason terminated = Simulator.Reason.STOP;
 
 
     public static void setIo(RISCVIO io) {
@@ -54,40 +56,50 @@ public class RARS {
         return this.main.getMachineList();
     }
 
-    public RISCV(RISCVprogram main, List<RISCVprogram> programs) {
+    public RARS(RISCVprogram main, ArrayList<RISCVprogram> programs) {
         this.programs = programs;
         this.main = main;
     }
 
-    public static RISCV fromFs(String main, RISCVFileSystem files) throws ProcessingException {
+    public static RARS fromFs(String main, RISCVFileSystem files) throws AssemblyException {
         RISCVprogram mainProgram = new RISCVprogram();
-        List<RISCVprogram> programs = mainProgram.prepareFilesForAssembly(main, files, null);
-        return new RISCV(mainProgram, programs);
+        ArrayList<RISCVprogram> programs = mainProgram.prepareFilesForAssembly(main, files, null);
+        return new RARS(mainProgram, programs);
     }
 
-    public static RISCV fromSource(String source) throws ProcessingException {
+    public static RARS fromSource(String source) throws AssemblyException {
         RISCVFileSystem files = new MemoryFileSystem();
         files.write("main", source);
-        return RISCV.fromFs("main", files);
+        return RARS.fromFs("main", files);
     }
 
     public static void initializeRISCV() {
         Globals.initialize();
     }
 
-    public ErrorList assemble() throws ProcessingException {
+    public ErrorList assemble() throws AssemblyException {
         ErrorList result = this.main.assemble(this.programs, true);
         Globals.program = this.main;
         return result;
     }
 
     public void initialize(boolean startAtMain) {
+        int pc = RegisterFile.getProgramCounter();
         RegisterFile.resetRegisters();
-        Coprocessor0.resetRegisters();
-        Coprocessor1.resetRegisters();
-        RegisterFile.initializeProgramCounter(startAtMain);
+        FloatingPointRegisterFile.resetRegisters();
+        ControlAndStatusRegisterFile.resetRegisters();
+        InterruptController.reset();
+        RegisterFile.initializeProgramCounter(pc);
+        Globals.exitCode = 0;
+
+        // Copy in assembled code and arguments
+        //simulation.copyFrom(assembled);
+        //Memory tmpMem = Memory.swapInstance(simulation);
+        //new ProgramArgumentList(args).storeProgramArguments();
+        //Memory.swapInstance(tmpMem);
+
+        //terminated = false;
         Stack.clearCallStack();
-        terminated = false;
     }
 
     public StackFrame[] getCallStack(){
@@ -102,21 +114,18 @@ public class RARS {
         return this.main.getLocalSymbolTable().getSymbolGivenIntAddress(address).getName();
     }
 
-    public boolean simulate(int[] breakpoints) throws ProcessingException {
-        terminated = this.main.simulate(breakpoints);
-        return terminated;
+    public Simulator.Reason simulate(int[] breakpoints) throws SimulationException {
+        terminated = this.main.simulate(-1, breakpoints);
+        return terminated; //TODO
     }
-    public boolean simulate(int limit) throws ProcessingException {
+    public Simulator.Reason simulate(int limit) throws SimulationException {
         terminated = this.main.simulate(limit);
         return terminated;
     }
-    public boolean simulate(int[] breakpoints, int limit) throws ProcessingException {
-        terminated = this.main.simulateFromPC(breakpoints, limit);
-        return terminated;
-    }
 
-    public boolean step() throws ProcessingException {
-        terminated = this.main.simulateStepAtPC();
+
+    public Simulator.Reason step() throws SimulationException {
+        terminated = this.main.simulate(1);
         return terminated;
     }
 
@@ -132,7 +141,8 @@ public class RARS {
     }
 
     public boolean hasTerminated(){
-        return terminated;
+        return false;
+        //return terminated; TODO
     }
 
     public Simulator getSimulator() {

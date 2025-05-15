@@ -158,7 +158,7 @@ public class SymbolTable {
     public Symbol getSymbolGivenAddress(String s) {
         int address;
         try {
-            address = rars.util.Binary.stringToInt(s);// DPS 2-Aug-2010: was Integer.parseInt(s) but croaked on hex
+            address = app.specy.rars.util.Binary.stringToInt(s);// DPS 2-Aug-2010: was Integer.parseInt(s) but croaked on hex
         } catch (NumberFormatException e) {
             return null;
         }
@@ -169,6 +169,16 @@ public class SymbolTable {
         }
         return null;
     }
+
+    public Symbol getSymbolGivenIntAddress(int address) {
+        for (Symbol sym : table) {
+            if (sym.getAddress() == address) {
+                return sym;
+            }
+        }
+        return null;
+    }
+
 
     /**
      * Produce Symbol object from either local or global symbol table that has the

@@ -3,8 +3,9 @@ package app.specy.rars.riscv.syscalls;
 import app.specy.rars.ExitingException;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -35,17 +36,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallMessageDialogString extends AbstractSyscall {
-    public SyscallMessageDialogString() {
+    RISCVIO io;
+
+    public SyscallMessageDialogString(RISCVIO io) {
         super("MessageDialogString", "Service to display a message followed by a string to user",
                 "a0 = address of null-terminated string that is the message to user <br>" +
                         "a1 = address of the second string to display", "N/A");
+        this.io = io;
+
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
-        // Display the dialog.
-        JOptionPane.showMessageDialog(null,
-                NullString.get(statement) + NullString.get(statement, "a1"),
-                null,
-                JOptionPane.INFORMATION_MESSAGE);
+        this.io.outputDialog(NullString.get(statement) + NullString.get(statement, "a1"), 1);
     }
 }

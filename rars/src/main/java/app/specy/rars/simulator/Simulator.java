@@ -8,7 +8,7 @@ import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
 import app.specy.rars.venus.run.RunSpeedPanel;
 
-import javax.swing.*;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Observable;

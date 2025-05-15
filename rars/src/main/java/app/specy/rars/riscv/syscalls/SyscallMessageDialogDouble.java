@@ -7,8 +7,9 @@ import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.riscv.io.RISCVIO;
 
-import javax.swing.*;
+
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -43,12 +44,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallMessageDialogDouble extends AbstractSyscall {
+    RISCVIO io;
+
     /**
      * Build an instance of the syscall with its default service number and name.
      */
-    public SyscallMessageDialogDouble() {
+    public SyscallMessageDialogDouble(RISCVIO io) {
         super("MessageDialogDouble", "Service to display message followed by a double",
-                "a0 = address of null-terminated string that is the message to user <br> fa0 = the double","N/A");
+                "a0 = address of null-terminated string that is the message to user <br> fa0 = the double", "N/A");
+        this.io = io;
+
     }
 
     /**
@@ -71,9 +76,8 @@ public class SyscallMessageDialogDouble extends AbstractSyscall {
             throw new ExitingException(statement, e);
         }
 
-        JOptionPane.showMessageDialog(null,
+        this.io.outputDialog(
                 message + Double.longBitsToDouble(FloatingPointRegisterFile.getValueLong(10)),
-                null,
-                JOptionPane.INFORMATION_MESSAGE);
+                1);
     }
 }

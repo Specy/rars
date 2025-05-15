@@ -1,14 +1,14 @@
 package app.specy.rars;
 
 import app.specy.rars.assembler.*;
+import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.BackStepper;
 import app.specy.rars.simulator.Simulator;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.Arrays;
+//TODO was java.io import
+//TODO was java.io import
+import java.util.*;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -62,6 +62,11 @@ public class RISCVprogram {
     private MacroPool macroPool;
     private ArrayList<SourceLine> sourceLineList;
     private Tokenizer tokenizer;
+    private Map<Integer, ProgramStatement> machineListPCMap;
+
+    public ProgramStatement getMachineStatement(int address) {
+        return machineListPCMap.get(address);
+    }
 
     /**
      * Produces list of source statements that comprise the program.
@@ -267,8 +272,8 @@ public class RISCVprogram {
      * Prepares the given list of files for assembly.  This involves
      * reading and tokenizing all the source files.  There may be only one.
      *
-     * @param filenames        ArrayList containing the source file name(s) in no particular order
-     * @param leadFilename     String containing name of source file that needs to go first and
+     * @param files        ArrayList containing the source file name(s) in no particular order
+     * @param main     String containing name of source file that needs to go first and
      *                         will be represented by "this" RISCVprogram object.
      * @param exceptionHandler String containing name of source file containing exception
      *                         handler.  This will be assembled first, even ahead of leadFilename, to allow it to
@@ -279,19 +284,20 @@ public class RISCVprogram {
      * @throws AssemblyException Will throw exception if errors occurred while reading or tokenizing.
      **/
 
-    public ArrayList<RISCVprogram> prepareFilesForAssembly(ArrayList<String> filenames, String leadFilename, String exceptionHandler) throws AssemblyException {
+    public ArrayList<RISCVprogram> prepareFilesForAssembly(String main, RISCVFileSystem files, RISCVFile exceptionHandler) throws AssemblyException {
         ArrayList<RISCVprogram> programsToAssemble = new ArrayList<>();
+        List<RISCVFile> filesList = files.getFiles();
         int leadFilePosition = 0;
-        if (exceptionHandler != null && exceptionHandler.length() > 0) {
-            filenames.add(0, exceptionHandler);
+        if (exceptionHandler != null) {
+            filesList.add(0, exceptionHandler);
             leadFilePosition = 1;
         }
-        for (String filename : filenames) {
-            RISCVprogram preparee = (filename.equals(leadFilename)) ? this : new RISCVprogram();
-            preparee.readSource(filename);
+        for (RISCVFile file : filesList) {
+            RISCVprogram preparee = (file.getName().equals(main)) ? this : new RISCVprogram();
+            preparee.readSource(file.getName());
             preparee.tokenize();
             // I want "this" RISCVprogram to be the first in the list...except for exception handler
-            if (preparee == this && programsToAssemble.size() > 0) {
+            if (preparee == this && !programsToAssemble.isEmpty()) {
                 programsToAssemble.add(leadFilePosition, preparee);
             } else {
                 programsToAssemble.add(preparee);
@@ -334,6 +340,10 @@ public class RISCVprogram {
         this.backStepper = null;
         Assembler asm = new Assembler();
         this.machineList = asm.assemble(programsToAssemble, extendedAssemblerEnabled, warningsAreErrors);
+        this.machineListPCMap = new HashMap<Integer, ProgramStatement>();
+        for(ProgramStatement ps : machineList) {
+            machineListPCMap.put(ps.getAddress(), ps);
+        }
         this.backStepper = new BackStepper();
         return asm.getErrorList();
     }
@@ -352,6 +362,12 @@ public class RISCVprogram {
         Simulator sim = Simulator.getInstance();
         return sim.simulate(RegisterFile.getProgramCounter(), maxSteps, null);
     }
+
+    public Simulator.Reason simulate(int maxSteps, int[] breakPoints) throws SimulationException {
+        Simulator sim = Simulator.getInstance();
+        return sim.simulate(RegisterFile.getProgramCounter(), maxSteps, breakPoints);
+    }
+
 
     /**
      * Simulates execution of the program (in a new thread). Program must have already been assembled.
