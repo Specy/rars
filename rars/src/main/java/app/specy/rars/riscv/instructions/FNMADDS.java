@@ -38,6 +38,6 @@ public class FNMADDS extends FusedFloat {
     public Float32 compute(Float32 f1, Float32 f2, Float32 f3, Environment e){
         // TODO: test if this is the right behaviour
         flipRounding(e);
-        return jsoftfloat.operations.Arithmetic.fusedMultiplyAdd(f1,f2,f3,e).negate();
+        return app.specy.rars.jsoftfloat.operations.Arithmetic.fusedMultiplyAdd(f1,f2,f3,e).negate();
     }
 }

@@ -36,6 +36,6 @@ public class FMINS extends Floating {
     }
 
     public Float32 compute(Float32 f1, Float32 f2, Environment env) {
-        return jsoftfloat.operations.Comparisons.minimumNumber(f1,f2,env);
+        return app.specy.rars.jsoftfloat.operations.Comparisons.minimumNumber(f1,f2,env);
     }
 }

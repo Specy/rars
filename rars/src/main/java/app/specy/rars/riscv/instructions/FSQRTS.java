@@ -46,7 +46,7 @@ public class FSQRTS extends BasicInstruction {
         int[] operands = statement.getOperands();
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
-        Float32 result = jsoftfloat.operations.Arithmetic.squareRoot(new Float32(FloatingPointRegisterFile.getValue(operands[1])),e);
+        Float32 result = app.specy.rars.jsoftfloat.operations.Arithmetic.squareRoot(new Float32(FloatingPointRegisterFile.getValue(operands[1])),e);
         Floating.setfflags(e);
         FloatingPointRegisterFile.updateRegister(operands[0],result.bits);
     }

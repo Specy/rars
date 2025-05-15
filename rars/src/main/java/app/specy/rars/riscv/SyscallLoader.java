@@ -3,7 +3,6 @@ package app.specy.rars.riscv;
 import app.specy.rars.Globals;
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.syscalls.*;
-import app.specy.rars.util.FilenameFinder;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,21 +48,23 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 public class SyscallLoader {
 
-    private RISCVIO io;
-
-    public SyscallLoader(RISCVIO io) {
-        this.io = io;
-        loadSyscalls();
-    }
-
+    private static RISCVIO io;
     private static ArrayList<AbstractSyscall> syscallList;
 
-    SyscallLoader add(AbstractSyscall syscall) {
-        syscallList.add(syscall);
-        return this;
+    public static void setIO(RISCVIO io) {
+        SyscallLoader.io = io;
+        SyscallLoader.loadSyscalls();
     }
 
-    private void loadSyscalls() {
+    static {
+        SyscallLoader.loadSyscalls();
+    }
+
+    public static void add(AbstractSyscall syscall) {
+        syscallList.add(syscall);
+    }
+
+    private static void loadSyscalls() {
         syscallList = new ArrayList<AbstractSyscall>();
         add(new SyscallClose());
         add(new SyscallConfirmDialog(io));
@@ -103,7 +104,7 @@ public class SyscallLoader {
         add(new SyscallTime());
 
         add(new SyscallGetCWD());
-        add(new SyscallLSeek());
+        //add(new SyscallLSeek());
 
         syscallList = processSyscallNumberOverrides(syscallList);
     }

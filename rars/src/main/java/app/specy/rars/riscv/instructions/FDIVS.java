@@ -38,6 +38,6 @@ public class FDIVS extends Floating {
 
     @Override
     public Float32 compute(Float32 f1, Float32 f2, Environment e) {
-        return jsoftfloat.operations.Arithmetic.division(f1,f2,e);
+        return app.specy.rars.jsoftfloat.operations.Arithmetic.division(f1,f2,e);
     }
 }

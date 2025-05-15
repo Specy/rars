@@ -6,8 +6,6 @@ import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.BackStepper;
 import app.specy.rars.simulator.Simulator;
 
-//TODO was java.io import
-//TODO was java.io import
 import java.util.*;
 
 /*
@@ -236,24 +234,9 @@ public class RISCVprogram {
      * @throws AssemblyException Will throw exception if there is any problem reading the file.
      **/
 
-    public void readSource(String file) throws AssemblyException {
+    public void readSource(String file, String source) throws AssemblyException {
         this.filename = file;
-        this.sourceList = new ArrayList<>();
-        ErrorList errors;
-        BufferedReader inputFile;
-        String line;
-        try {
-            inputFile = new BufferedReader(new FileReader(file));
-            line = inputFile.readLine();
-            while (line != null) {
-                sourceList.add(line);
-                line = inputFile.readLine();
-            }
-        } catch (Exception e) {
-            errors = new ErrorList();
-            errors.add(new ErrorMessage((RISCVprogram) null, 0, 0, e.toString()));
-            throw new AssemblyException(errors);
-        }
+        this.sourceList = new ArrayList(Arrays.asList(source.split("\n")));
     }
 
     /**
@@ -262,9 +245,9 @@ public class RISCVprogram {
      * @throws AssemblyException Will throw exception if errors occurred while tokenizing.
      **/
 
-    public void tokenize() throws AssemblyException {
+    public void tokenize(RISCVFileSystem files) throws AssemblyException {
         this.tokenizer = new Tokenizer();
-        this.tokenList = tokenizer.tokenize(this);
+        this.tokenList = tokenizer.tokenize(this, files);
         this.localSymbolTable = new SymbolTable(this.filename); // prepare for assembly
     }
 
@@ -294,8 +277,8 @@ public class RISCVprogram {
         }
         for (RISCVFile file : filesList) {
             RISCVprogram preparee = (file.getName().equals(main)) ? this : new RISCVprogram();
-            preparee.readSource(file.getName());
-            preparee.tokenize();
+            preparee.readSource(file.getName(), file.getSource());
+            preparee.tokenize(files);
             // I want "this" RISCVprogram to be the first in the list...except for exception handler
             if (preparee == this && !programsToAssemble.isEmpty()) {
                 programsToAssemble.add(leadFilePosition, preparee);

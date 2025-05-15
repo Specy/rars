@@ -26,7 +26,7 @@ public class FCVTSD extends BasicInstruction {
         FloatingPointRegisterFile.updateRegister(operands[0],out.bits);
     }
     // Kindof a long type, but removes duplicate code and would make it easy for quads to be implemented.
-    public static <S extends jsoftfloat.types.Floating<S>,D extends jsoftfloat.types.Floating<D>>
+    public static <S extends app.specy.rars.jsoftfloat.types.Floating<S>,D extends app.specy.rars.jsoftfloat.types.Floating<D>>
         S convert(D toconvert, S constructor, Environment e){
         if(toconvert.isInfinite()){
             return toconvert.isSignMinus() ? constructor.NegativeInfinity() : constructor.Infinity();

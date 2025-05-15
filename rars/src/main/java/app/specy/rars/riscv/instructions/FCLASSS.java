@@ -58,7 +58,7 @@ public class FCLASSS extends BasicInstruction {
         fclass(in,operands[0]);
     }
 
-    public static <T extends jsoftfloat.types.Floating<T>> void fclass(T in, int out){
+    public static <T extends app.specy.rars.jsoftfloat.types.Floating<T>> void fclass(T in, int out){
         if (in.isNaN()) {
             RegisterFile.updateRegister(out, in.isSignalling() ? 0x100 : 0x200);
         } else {

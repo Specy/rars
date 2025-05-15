@@ -22,7 +22,7 @@ public class FCVTSL extends BasicInstruction {
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
         Float32 tmp = new Float32(0);
-        Float32 converted = jsoftfloat.operations.Conversions.convertFromInt(BigInteger.valueOf(RegisterFile.getValueLong(operands[1])),e,tmp);
+        Float32 converted = app.specy.rars.jsoftfloat.operations.Conversions.convertFromInt(BigInteger.valueOf(RegisterFile.getValueLong(operands[1])),e,tmp);
         Floating.setfflags(e);
         FloatingPointRegisterFile.updateRegister(operands[0],converted.bits);
     }

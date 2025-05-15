@@ -51,7 +51,7 @@ public class FCVTWS extends BasicInstruction {
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
         Float32 in = new Float32(FloatingPointRegisterFile.getValue(operands[1]));
-        int out = jsoftfloat.operations.Conversions.convertToInt(in,e,false);
+        int out = app.specy.rars.jsoftfloat.operations.Conversions.convertToInt(in,e,false);
         Floating.setfflags(e);
         RegisterFile.updateRegister(operands[0],out);
     }

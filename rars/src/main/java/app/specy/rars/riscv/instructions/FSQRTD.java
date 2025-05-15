@@ -18,7 +18,7 @@ public class FSQRTD extends BasicInstruction {
         int[] operands = statement.getOperands();
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
-        Float64 result = jsoftfloat.operations.Arithmetic.squareRoot(new Float64(FloatingPointRegisterFile.getValueLong(operands[1])),e);
+        Float64 result = app.specy.rars.jsoftfloat.operations.Arithmetic.squareRoot(new Float64(FloatingPointRegisterFile.getValueLong(operands[1])),e);
         Floating.setfflags(e);
         FloatingPointRegisterFile.updateRegisterLong(operands[0],result.bits);
     }

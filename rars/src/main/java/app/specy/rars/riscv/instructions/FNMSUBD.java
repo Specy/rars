@@ -10,6 +10,6 @@ public class FNMSUBD extends FusedDouble {
 
     public Float64 compute(Float64 f1, Float64 f2, Float64 f3, Environment e){
         FusedFloat.flipRounding(e);
-        return jsoftfloat.operations.Arithmetic.fusedMultiplyAdd(f1,f2,f3.negate(),e).negate();
+        return app.specy.rars.jsoftfloat.operations.Arithmetic.fusedMultiplyAdd(f1,f2,f3.negate(),e).negate();
     }
 }

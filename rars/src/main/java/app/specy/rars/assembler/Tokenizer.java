@@ -1,8 +1,8 @@
 package app.specy.rars.assembler;
 
 import app.specy.rars.*;
+import app.specy.rars.riscv.fs.RISCVFileSystem;
 
-//TODO was java.io import
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -88,12 +88,12 @@ public class Tokenizer {
      * that represents a tokenized source statement from the program.
      **/
 
-    public ArrayList<TokenList> tokenize(RISCVprogram p) throws AssemblyException {
+    public ArrayList<TokenList> tokenize(RISCVprogram p, RISCVFileSystem files) throws AssemblyException {
         sourceRISCVprogram = p;
         equivalents = new HashMap<>(); // DPS 11-July-2012
         ArrayList<TokenList> tokenList = new ArrayList<>();
         //ArrayList source = p.getSourceList();
-        ArrayList<SourceLine> source = processIncludes(p, new HashMap<>()); // DPS 9-Jan-2013
+        ArrayList<SourceLine> source = processIncludes(p, new HashMap<>(), files); // DPS 9-Jan-2013
         p.setSourceLineList(source);
         TokenList currentLineTokens;
         String sourceLine;
@@ -124,7 +124,7 @@ public class Tokenizer {
     // files that themselves have .include.  Plus it will detect and report recursive
     // includes both direct and indirect.
     // DPS 11-Jan-2013
-    private ArrayList<SourceLine> processIncludes(RISCVprogram program, Map<String, String> inclFiles) throws AssemblyException {
+    private ArrayList<SourceLine> processIncludes(RISCVprogram program, Map<String, String> inclFiles, RISCVFileSystem files) throws AssemblyException {
         ArrayList<String> source = program.getSourceList();
         ArrayList<SourceLine> result = new ArrayList<>(source.size());
         for (int i = 0; i < source.size(); i++) {
@@ -151,14 +151,22 @@ public class Tokenizer {
                     inclFiles.put(filename, filename);
                     RISCVprogram incl = new RISCVprogram();
                     try {
-                        incl.readSource(filename);
+                        String finalFileName = filename;
+                        RISCVFile file = files.getFiles().stream().filter(f -> f.getName().equals(finalFileName)).findFirst().orElse(null);
+                        if (file == null) {
+                            Token t = tl.get(ii + 1);
+                            errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
+                                    "Error reading include file " + filename));
+                            throw new AssemblyException(errors);
+                        }
+                        incl.readSource(file.getName(), file.getSource());
                     } catch (AssemblyException p) {
                         Token t = tl.get(ii + 1);
                         errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
                                 "Error reading include file " + filename));
                         throw new AssemblyException(errors);
                     }
-                    ArrayList<SourceLine> allLines = processIncludes(incl, inclFiles);
+                    ArrayList<SourceLine> allLines = processIncludes(incl, inclFiles, files);
                     result.addAll(allLines);
                     hasInclude = true;
                     break;

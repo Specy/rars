@@ -6,7 +6,6 @@ import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.Instruction;
 import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
-import app.specy.rars.venus.run.RunSpeedPanel;
 
 
 import java.util.ArrayList;
@@ -51,7 +50,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 public class Simulator extends Observable {
     private SimThread simulatorThread;
     private static Simulator simulator = null;  // Singleton object
-    private static Runnable interactiveGUIUpdater = null;
 
     /**
      * various reasons for simulate to end...
@@ -84,9 +82,6 @@ public class Simulator extends Observable {
 
     private Simulator() {
         simulatorThread = null;
-        if (Globals.getGui() != null) {
-            interactiveGUIUpdater = new UpdateGUI();
-        }
     }
 
     /**
@@ -112,6 +107,10 @@ public class Simulator extends Observable {
         }
         return out;
     }
+    public boolean hasTerminated() {
+        return simulatorThread == null || simulatorThread.done;
+    }
+
 
     /**
      * Start simulated execution of given source program (in a new thread).  It must have already been assembled.
@@ -231,20 +230,13 @@ public class Simulator extends Observable {
             notify();
         }
 
-        private void startExecution() {
-            Simulator.getInstance().notifyObserversOfExecution(new SimulatorNotice(SimulatorNotice.SIMULATOR_START,
-                    maxSteps,(Globals.getGui() != null || Globals.runSpeedPanelExists)?RunSpeedPanel.getInstance().getRunSpeed():RunSpeedPanel.UNLIMITED_SPEED,
-                    pc, null, pe, done));
-        }
+
 
         private void stopExecution(boolean done, Reason reason) {
             this.done = done;
             this.constructReturnReason = reason;
             SystemIO.flush(true);
             if (done) SystemIO.resetFiles(); // close any files opened in the process of simulating
-            Simulator.getInstance().notifyObserversOfExecution(new SimulatorNotice(SimulatorNotice.SIMULATOR_STOP,
-                    maxSteps, (Globals.getGui() != null || Globals.runSpeedPanelExists)?RunSpeedPanel.getInstance().getRunSpeed():RunSpeedPanel.UNLIMITED_SPEED,
-                    pc, reason, pe, done));
         }
 
         private synchronized void interrupt() {
@@ -334,20 +326,12 @@ public class Simulator extends Observable {
          */
 
         public void run() {
-            // The next two statements are necessary for GUI to be consistently updated
-            // before the simulation gets underway.  Without them, this happens only intermittently,
-            // with a consequence that some simulations are interruptable using PAUSE/STOP and others
-            // are not (because one or the other or both is not yet enabled).
-            Thread.currentThread().setPriority(Thread.NORM_PRIORITY - 1);
-            Thread.yield();  // let the main thread run a bit to finish updating the GUI
 
             if (breakPoints == null || breakPoints.length == 0) {
                 breakPoints = null;
             } else {
                 Arrays.sort(breakPoints);  // must be pre-sorted for binary search
             }
-
-            startExecution();
 
             // *******************  PS addition 26 July 2006  **********************
             // A couple statements below were added for the purpose of assuring that when
@@ -392,7 +376,6 @@ public class Simulator extends Observable {
                 // to access memory and registers only through synchronized blocks on same
                 // lock variable, then full (albeit heavy-handed) protection of memory and
                 // registers is assured.  Not as critical for reading from those resources.
-                Globals.memoryAndRegistersLock.lock();
                 try {
                     // Handle pending interupts and traps first
                     long uip = ControlAndStatusRegisterFile.getValueNoNotify("uip"), uie = ControlAndStatusRegisterFile.getValueNoNotify("uie");
@@ -518,7 +501,7 @@ public class Simulator extends Observable {
                         }
                     }
                 } finally {
-                    Globals.memoryAndRegistersLock.unlock();
+
                 }
 
                 // Update cycle(h) and instret(h)
@@ -549,40 +532,10 @@ public class Simulator extends Observable {
                     }
                     waiting = false;
                 }
-
-                // schedule GUI update only if: there is in fact a GUI! AND
-                //                              using Run,  not Step (maxSteps != 1) AND
-                //                              running slowly enough for GUI to keep up
-                if (interactiveGUIUpdater != null && maxSteps != 1 &&
-                        RunSpeedPanel.getInstance().getRunSpeed() < RunSpeedPanel.UNLIMITED_SPEED) {
-                    SwingUtilities.invokeLater(interactiveGUIUpdater);
-                }
-                if (Globals.getGui() != null || Globals.runSpeedPanelExists) { // OR added by DPS 24 July 2008 to enable speed control by stand-alone tool
-                    if (maxSteps != 1 &&
-                            RunSpeedPanel.getInstance().getRunSpeed() < RunSpeedPanel.UNLIMITED_SPEED) {
-                        try {
-                            // TODO: potentially use this.wait so it can be interrupted
-                            Thread.sleep((int) (1000 / RunSpeedPanel.getInstance().getRunSpeed())); // make sure it's never zero!
-                        } catch (InterruptedException e) {
-                        }
-                    }
-                }
             }
             stopExecution(false, constructReturnReason);
         }
     }
 
-    private class UpdateGUI implements Runnable {
-        public void run() {
-            if (Globals.getGui().getRegistersPane().getSelectedComponent() ==
-                    Globals.getGui().getMainPane().getExecutePane().getRegistersWindow()) {
-                Globals.getGui().getMainPane().getExecutePane().getRegistersWindow().updateRegisters();
-            } else {
-                Globals.getGui().getMainPane().getExecutePane().getFloatingPointWindow().updateRegisters();
-            }
-            Globals.getGui().getMainPane().getExecutePane().getDataSegmentWindow().updateValues();
-            Globals.getGui().getMainPane().getExecutePane().getTextSegmentWindow().setCodeHighlighting(true);
-            Globals.getGui().getMainPane().getExecutePane().getTextSegmentWindow().highlightStepAtPC();
-        }
-    }
+
 }

@@ -6,6 +6,7 @@ import app.specy.rars.Settings;
 import app.specy.rars.SimulationException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.instructions.*;
+import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.syscalls.*;
 import app.specy.rars.util.SystemIO;
 import java.util.*;
@@ -52,6 +53,10 @@ public class InstructionSet {
 
     private ArrayList<Instruction> instructionList;
     private ArrayList<MatchMap> opcodeMatchMaps;
+    public void setSyscallLoaderIO(RISCVIO io) {
+        SyscallLoader.setIO(io);
+    }
+
 
     /**
      * Creates a new InstructionSet object.

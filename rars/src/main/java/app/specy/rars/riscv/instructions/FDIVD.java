@@ -10,6 +10,6 @@ public class FDIVD extends Double{
 
     @Override
     public Float64 compute(Float64 f1, Float64 f2, Environment e) {
-        return jsoftfloat.operations.Arithmetic.division(f1,f2,e);
+        return app.specy.rars.jsoftfloat.operations.Arithmetic.division(f1,f2,e);
     }
 }

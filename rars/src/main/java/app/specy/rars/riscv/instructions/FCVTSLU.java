@@ -27,7 +27,7 @@ public class FCVTSLU extends BasicInstruction {
         if (value < 0) {
             unsigned = unsigned.add(BigInteger.ONE.shiftLeft(64));
         }
-        Float32 converted = jsoftfloat.operations.Conversions.convertFromInt(unsigned,e,tmp);
+        Float32 converted = app.specy.rars.jsoftfloat.operations.Conversions.convertFromInt(unsigned,e,tmp);
         Floating.setfflags(e);
         FloatingPointRegisterFile.updateRegister(operands[0],converted.bits);
     }

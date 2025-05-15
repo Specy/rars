@@ -12,7 +12,6 @@ import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
 import app.specy.rars.riscv.Instruction;
 import app.specy.rars.util.Binary;
-import app.specy.rars.venus.NumberDisplayBaseChooser;
 
 import java.util.ArrayList;
 
@@ -832,8 +831,8 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
         }
 
         public String toString() {
-            int addressBase = (Globals.getSettings().getBooleanSetting(Settings.Bool.DISPLAY_ADDRESSES_IN_HEX)) ? NumberDisplayBaseChooser.HEXADECIMAL : NumberDisplayBaseChooser.DECIMAL;
-            int valueBase = (Globals.getSettings().getBooleanSetting(Settings.Bool.DISPLAY_VALUES_IN_HEX)) ? NumberDisplayBaseChooser.HEXADECIMAL : NumberDisplayBaseChooser.DECIMAL;
+            int addressBase = (Globals.getSettings().getBooleanSetting(Settings.Bool.DISPLAY_ADDRESSES_IN_HEX)) ? 16 : 10;
+            int valueBase = (Globals.getSettings().getBooleanSetting(Settings.Bool.DISPLAY_ADDRESSES_IN_HEX)) ? 16 : 10;
 
             StringBuffer result = new StringBuffer();
             for (ListElement e : list) {
@@ -842,13 +841,17 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                         result.append(e.sValue);
                         break;
                     case 1:
-                        result.append(NumberDisplayBaseChooser.formatNumber(e.iValue, addressBase));
+                        if (addressBase == 10) {
+                            result.append(e.iValue);
+                        } else {
+                            result.append(Binary.intToHexString(e.iValue));
+                        }
                         break;
                     case 2:
-                        if (valueBase == NumberDisplayBaseChooser.HEXADECIMAL) {
-                            result.append(rars.util.Binary.intToHexString(e.iValue)); // 13-July-2011, was: intToHalfHexString()
+                        if (valueBase == 10) {
+                            result.append(e.iValue);
                         } else {
-                            result.append(NumberDisplayBaseChooser.formatNumber(e.iValue, valueBase));
+                            result.append(Binary.intToHexString(e.iValue));
                         }
                         break;
                     case 3:

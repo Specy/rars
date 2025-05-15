@@ -26,8 +26,8 @@ public class StackFrame {
     public static StackFrame fromGlobalState(int returnAddress){
         return new StackFrame(
                 RegisterFile.getProgramCounter(),
-                RegisterFile.getStackPointerRegister().getValue(),
-                RegisterFile.getFramePointerRegister().getValue(),
+                (int) RegisterFile.getStackPointerRegister().getValue(),
+                (int) RegisterFile.getFramePointerRegister().getValue(),
                 returnAddress,
                 RegisterFile.getRegistersValues()
         );

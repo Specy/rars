@@ -20,7 +20,7 @@ public class FCVTLD extends BasicInstruction {
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
         Float64 in = new Float64(FloatingPointRegisterFile.getValueLong(operands[1]));
-        long out = jsoftfloat.operations.Conversions.convertToLong(in,e,false);
+        long out = app.specy.rars.jsoftfloat.operations.Conversions.convertToLong(in,e,false);
         Floating.setfflags(e);
         RegisterFile.updateRegister(operands[0],out);
     }

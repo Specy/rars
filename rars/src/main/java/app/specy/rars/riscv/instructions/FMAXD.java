@@ -9,6 +9,6 @@ public class FMAXD extends Double {
     }
 
     public Float64 compute(Float64 f1, Float64 f2, Environment env) {
-        return jsoftfloat.operations.Comparisons.maximumNumber(f1,f2,env);
+        return app.specy.rars.jsoftfloat.operations.Comparisons.maximumNumber(f1,f2,env);
     }
 }

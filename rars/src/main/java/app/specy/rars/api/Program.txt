@@ -8,8 +8,6 @@ import app.specy.rars.simulator.ProgramArgumentList;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
-//TODO was java.io import
-//TODO was java.io import
 import java.util.ArrayList;
 
 /**

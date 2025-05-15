@@ -285,6 +285,7 @@ public class PseudoOps {
 
             //* 64-bit instructions
 
+            /*
             "# Templates that override 32 bit templates in the case that the 32 bit version doesn't work",
             "# This needs to be here because it should have priority over the other li's",
             "li t1,-100     ;addi RG1, x0, VL2                ;#Load Immediate : Set t1 to 12-bit immediate (sign-extended)",
@@ -322,6 +323,7 @@ public class PseudoOps {
             "ld t1,label	   ;auipc RG1, PCH2 ;ld RG1, PCL2(RG1) ;#Load Double word : Set t1 to contents of memory word at label's address",
             "ld t1,%lo(label)(t2)  ;ld RG1,LL4(RG7)  ;#Load from Address",
 
+             */
 
 
 

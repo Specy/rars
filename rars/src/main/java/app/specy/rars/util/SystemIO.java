@@ -3,10 +3,9 @@ package app.specy.rars.util;
 import app.specy.rars.Globals;
 import app.specy.rars.Settings;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.riscv.io.RISCVIOError;
 
 //TODO was java.io import
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 
 	/*
 Copyright (c) 2003-2013,  Pete Sanderson and Kenneth Vollmar
@@ -197,8 +196,6 @@ public class SystemIO {
             fileErrorString = "File descriptor " + fd + " is not open for writing";
             return -1;
         }
-        // retrieve FileOutputStream from storage
-        OutputStream outputStream = (OutputStream) FileIOData.getStreamInUse(fd);
         try {
             // Oct. 9 2005 Ken Vollmar
             // Observation: made a call to outputStream.write(myBuffer, 0, lengthRequested)
@@ -212,11 +209,24 @@ public class SystemIO {
 
             // Oct. 9 2005 Ken Vollmar  Force the write statement to write exactly
             // the number of bytes requested, even though those bytes include many ZERO values.
-            for (int ii = 0; ii < lengthRequested; ii++) {
-                outputStream.write(myBuffer[ii]);
+            if (lengthRequested > myBuffer.length || lengthRequested < 0) {
+                throw new IndexOutOfBoundsException("Requested length exceeds buffer size");
             }
-            outputStream.flush();// DPS 7-Jan-2013
-        } catch (IOException e) {
+
+            byte[] slice = new byte[lengthRequested];
+            for (int i = 0; i < lengthRequested; i++) {
+                slice[i] = myBuffer[i];
+            }
+            if (fd == STDOUT) {
+                io.stdOut(slice);
+            } else if (fd == STDERR) {
+                io.stdErr(slice);
+            } else if (fd == STDIN) {
+                throw new RISCVIOError("Cannot write to STDIN");
+            } else {
+                io.writeFile(fd, slice);
+            }
+        } catch (RISCVIOError e) {
             fileErrorString = "IO Exception on write of file with fd " + fd;
             return -1;
         } catch (IndexOutOfBoundsException e) {
@@ -239,17 +249,6 @@ public class SystemIO {
      */
     public static int readFromFile(int fd, byte[] myBuffer, int lengthRequested) {
         int retValue = -1;
-        /////////////// DPS 8-Jan-2013  //////////////////////////////////////////////////
-        /// Read from STDIN file descriptor while using IDE - get input from Messages pane.
-        if (fd == STDIN && Globals.getGui() != null) {
-            String input = Globals.getGui().getMessagesPane().getInputString(lengthRequested);
-            byte[] bytesRead = input.getBytes();
-
-            for (int i = 0; i < myBuffer.length; i++) {
-                myBuffer[i] = (i < bytesRead.length) ? bytesRead[i] : 0;
-            }
-            return Math.min(myBuffer.length, bytesRead.length);
-        }
         ////////////////////////////////////////////////////////////////////////////////////
         //// When running in command mode, code below works for either regular file or STDIN
 
@@ -259,16 +258,14 @@ public class SystemIO {
             return -1;
         }
         // retrieve FileInputStream from storage
-        InputStream InputStream = (InputStream) FileIOData.getStreamInUse(fd);
         try {
-            // Reads up to lengthRequested bytes of data from this Input stream into an array of bytes.
-            retValue = InputStream.read(myBuffer, 0, lengthRequested);
-            // This method will return -1 upon EOF, but our spec says that negative
-            // value represents an error, so we return 0 for EOF.  DPS 10-July-2008.
-            if (retValue == -1) {
-                retValue = 0;
+            if(fd == STDIN) {
+                io.stdIn(myBuffer, lengthRequested);
+                return 0;
+            } else if (fd == STDOUT || fd == STDERR) {
+                throw new RISCVIOError("Cannot read from STDOUT or STDERR");
             }
-        } catch (IOException e) {
+        } catch (RISCVIOError e) {
             fileErrorString = "IO Exception on read of file with fd " + fd;
             return -1;
         } catch (IndexOutOfBoundsException e) {
@@ -289,6 +286,8 @@ public class SystemIO {
      * @return -1 on error
      */
     public static int seek(int fd, int offset, int base) {
+        //TODO
+        /*
         if (!FileIOData.fdInUse(fd, 0)) // Check the existence of the "read" fd
         {
             fileErrorString = "File descriptor " + fd + " is not open for reading";
@@ -324,6 +323,8 @@ public class SystemIO {
         } catch (IOException io) {
             return -1;
         }
+        */
+        return -1;
     }
 
     /**
@@ -341,8 +342,6 @@ public class SystemIO {
         // that file descriptor.
 
         int retValue = -1;
-        FileInputStream inputStream;
-        FileOutputStream outputStream;
         int fdToUse;
 
         // Check internal plausibility of opening this file
@@ -352,30 +351,25 @@ public class SystemIO {
             return -1;
         }   // fileErrorString would have been set
 
-        File filepath = new File(filename);
-        if (!filepath.isAbsolute() && Globals.program != null && Globals.getSettings()
-                .getBooleanSetting(Settings.Bool.DERIVE_CURRENT_WORKING_DIRECTORY)) {
-            String parent = new File(Globals.program.getFilename()).getParent();
-            filepath = new File(parent, filename);
-        }
         if (flags == O_RDONLY) // Open for reading only
         {
             try {
-                // Set up input stream from disk file
-                inputStream = new FileInputStream(filepath);
-                FileIOData.setStreamInUse(fdToUse, inputStream); // Save stream for later use
-            } catch (FileNotFoundException e) {
-                fileErrorString = "File " + filename + " not found, open for input.";
+                io.openFile(filename, flags, false);
+                FileIOData.setStreamInUse(fdToUse);
+            } catch (RISCVIOError e) {
+                fileErrorString = new String(
+                        "Error with file " + filename);
                 retValue = -1;
             }
         } else if ((flags & O_WRONLY) != 0) // Open for writing only
         {
             // Set up output stream to disk file
             try {
-                outputStream = new FileOutputStream(filepath, ((flags & O_APPEND) != 0));
-                FileIOData.setStreamInUse(fdToUse, outputStream); // Save stream for later use
-            } catch (FileNotFoundException e) {
-                fileErrorString = "File " + filename + " not found, open for output.";
+                io.openFile(filename, flags, ((flags & O_APPEND) != 0));
+                FileIOData.setStreamInUse(fdToUse);
+            } catch (RISCVIOError e) {
+                fileErrorString = new String(
+                        "Error with file " + filename);
                 retValue = -1;
             }
         }
@@ -408,103 +402,16 @@ public class SystemIO {
         return fileErrorString;
     }
 
-    ///////////////////////////////////////////////////////////////////////
-    // Private method to simply return the BufferedReader used for
-    // keyboard input, redirected input, or piped input.
-    // These are all equivalent in the eyes of the program because they are
-    // transparent to it.  Lazy instantiation.  DPS.  28 Feb 2008
 
-    private static BufferedReader getInputReader() {
-        if (FileIOData.inputReader == null) {
-            FileIOData.inputReader = new BufferedReader(new InputStreamReader(System.in));
-        }
-        return FileIOData.inputReader;
-    }
-    private static BufferedWriter getOutputWriter(){
-        if (FileIOData.outputWriter==null){
-            FileIOData.outputWriter=new BufferedWriter(new OutputStreamWriter(System.out));
-        }
-        return FileIOData.outputWriter;
-    }
 
-    // The GUI doesn't handle lots of small messages well so I added this hacky way of buffering
-    // Currently it checks to flush every instruction run
-    private static String buffer = "";
-    private static long lasttime = 0;
-    private static void print2Gui(String output){
-        long time = System.currentTimeMillis();
-        if (time > lasttime) {
-            Globals.getGui().getMessagesPane().postRunMessage(buffer+output);
-            buffer = "";
-            lasttime = time + 100;
-        } else {
-            buffer += output;
-        }
-    }
     /**
      * Flush stdout cache
      * Makes sure that messages don't get stuck in the print2Gui buffer for too long.
      */
     public static void flush(boolean force) {
-        long time = System.currentTimeMillis();
-        if (buffer != "" && (force || time > lasttime)){
-            Globals.getGui().getMessagesPane().postRunMessage(buffer);
-            buffer = "";
-            lasttime = time + 100;
-        }
+        //NO-OP
     }
 
-    public static Data swapData(Data in){
-        Data temp = new Data(false);
-        temp.fileNames = FileIOData.fileNames;
-        temp.fileFlags = FileIOData.fileFlags;
-        temp.streams = FileIOData.streams;
-        temp.inputReader = FileIOData.inputReader;
-        temp.outputWriter = FileIOData.outputWriter;
-        temp.errorWriter = FileIOData.errorWriter;
-        FileIOData.fileNames = in.fileNames;
-        FileIOData.fileFlags = in.fileFlags;
-        FileIOData.streams = in.streams;
-        FileIOData.inputReader = in.inputReader;
-        FileIOData.outputWriter = in.outputWriter;
-        FileIOData.errorWriter = in.errorWriter;
-        return temp;
-    }
-
-    public static class Data {
-        private String[] fileNames; // The filenames in use. Null if file descriptor i is not in use.
-        private int[] fileFlags; // The flags of this file, 0=READ, 1=WRITE. Invalid if this file descriptor is not in use.
-        public Closeable[] streams;
-        public BufferedReader inputReader;
-        public BufferedWriter outputWriter;
-        public BufferedWriter errorWriter;
-        public Data(boolean generate){
-            if(generate) {
-                fileNames = new String[SYSCALL_MAXFILES];
-                fileFlags = new int[SYSCALL_MAXFILES];
-                streams = new Closeable[SYSCALL_MAXFILES];
-                fileNames[STDIN] = "STDIN";
-                fileNames[STDOUT] = "STDOUT";
-                fileNames[STDERR] = "STDERR";
-                fileFlags[STDIN] = SystemIO.O_RDONLY;
-                fileFlags[STDOUT] = SystemIO.O_WRONLY;
-                fileFlags[STDERR] = SystemIO.O_WRONLY;
-                streams[STDIN] = System.in;
-                streams[STDOUT] = System.out;
-                streams[STDERR] = System.err;
-            }
-        }
-
-        public Data(ByteArrayInputStream in, ByteArrayOutputStream out, ByteArrayOutputStream err){
-            this(true);
-            this.streams[STDIN]=in;
-            this.streams[STDOUT]=out;
-            this.streams[STDERR]=err;
-            this.inputReader=new BufferedReader(new InputStreamReader(in));
-            this.outputWriter=new BufferedWriter(new OutputStreamWriter(out));
-            this.errorWriter=new BufferedWriter(new OutputStreamWriter(err));
-        }
-    }
 
     // //////////////////////////////////////////////////////////////////////////////
     // Maintain information on files in use. The index to the arrays is the "file descriptor."
@@ -513,29 +420,12 @@ public class SystemIO {
     private static class FileIOData {
         private static String[] fileNames = new String[SYSCALL_MAXFILES]; // The filenames in use. Null if file descriptor i is not in use.
         private static int[] fileFlags = new int[SYSCALL_MAXFILES]; // The flags of this file, 0=READ, 1=WRITE. Invalid if this file descriptor is not in use.
-        private static Closeable[] streams = new Closeable[SYSCALL_MAXFILES]; // The streams in use, associated with the filenames
-        public static BufferedReader inputReader;
-        public static BufferedWriter outputWriter;
-        public static BufferedWriter errorWriter;
+        private static Object[] streams = new Object[SYSCALL_MAXFILES]; // The streams in use, associated with the filenames
 
         // Reset all file information. Closes any open files and resets the arrays
         private static void resetFiles() {
             for (int i = 0; i < SYSCALL_MAXFILES; i++) {
                 close(i);
-            }
-            if (outputWriter!=null){
-                try {
-                    outputWriter.close();
-                    outputWriter=null;
-                } catch (IOException e){
-                }
-            }
-            if (errorWriter!=null){
-                try {
-                    errorWriter.close();
-                    errorWriter=null;
-                } catch (IOException e){
-                }
             }
             setupStdio();
         }
@@ -556,14 +446,8 @@ public class SystemIO {
         }
 
         // Preserve a stream that is in use
-        private static void setStreamInUse(int fd, Closeable s) {
-            streams[fd] = s;
-
-        }
-
-        // Retrieve a stream for use
-        private static Closeable getStreamInUse(int fd) {
-            return streams[fd];
+        private static void setStreamInUse(int fd) {
+            streams[fd] = true;
 
         }
 
@@ -608,11 +492,8 @@ public class SystemIO {
                 fileFlags[fd] = -1;
                 streams[fd] = null;
                 try {
-                    if (keepFlag == O_RDONLY)
-                        ((FileInputStream) keepStream).close();
-                    else
-                        ((FileOutputStream) keepStream).close();
-                } catch (IOException ioe) {
+                    io.closeFile(fd);
+                } catch (RISCVIOError ioe) {
                     // not concerned with this exception
                 }
             } else {

@@ -20,7 +20,7 @@ public class FCVTLUS extends BasicInstruction {
         Environment e = new Environment();
         e.mode = Floating.getRoundingMode(operands[2],statement);
         Float32 in = new Float32(FloatingPointRegisterFile.getValue(operands[1]));
-        long out = jsoftfloat.operations.Conversions.convertToUnsignedLong(in,e,false);
+        long out = app.specy.rars.jsoftfloat.operations.Conversions.convertToUnsignedLong(in,e,false);
         Floating.setfflags(e);
         RegisterFile.updateRegister(operands[0],out);
     }

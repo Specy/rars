@@ -188,6 +188,38 @@ public class RegisterFile {
         }
     }
 
+
+    public static Register getFramePointerRegister(){
+        return instance.getRegister("s0");
+    }
+
+    public static Register getStackPointerRegister(){
+        return instance.getRegister("sp");
+    }
+
+
+
+    public static int[] getRegistersValues() {
+        int len = instance.getRegisters().length;
+        int[] values = new int[len];
+        for (int i = 0; i < len; i++) {
+            values[i] = (int) instance.getRegisters()[i].getValue();
+        }
+        return values;
+    }
+
+
+
+    public static long[] getRegistersValuesLong() {
+        int len = instance.getRegisters().length;
+        long[] values = new long[len];
+        for (int i = 0; i < len; i++) {
+            values[i] = instance.getRegisters()[i].getValue();
+        }
+        return values;
+    }
+
+
     /**
      * For setting the Program Counter.  Note that ordinary PC update should be done using
      * incrementPC() method. Use this only when processing jumps and branches.

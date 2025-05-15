@@ -26,7 +26,7 @@ public class RARS {
 
     public static void setIo(RISCVIO io) {
         RARS.io = io;
-        Globals.instructionSet.setSyscallLoader(new SyscallLoader(io));
+        Globals.instructionSet.setSyscallLoaderIO(io);
         SystemIO.setRISCVIO(io);
     }
 

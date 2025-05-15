@@ -1,16 +1,14 @@
 package app.specy.rars;
 
 import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.config.ConfigProperties;
+import app.specy.rars.config.SyscallProperties;
 import app.specy.rars.riscv.SyscallLoader;
 import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.InstructionSet;
 import app.specy.rars.riscv.SyscallNumberOverride;
 
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.Properties;
-import java.util.StringTokenizer;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.*;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -48,12 +46,25 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 public class Globals {
     // List these first because they are referenced by methods called at initialization.
-    private SyscallLoader syscallLoader;
+    private static ConfigProperties configProperties;
 
 
-    public void setSyscallLoader(SyscallLoader loader) {
-        syscallLoader = loader;
+    private static SyscallProperties syscallProperties;
+    public static SyscallProperties getSyscallProperties() {
+        if (syscallProperties == null) {
+            syscallProperties = new SyscallProperties();
+        }
+        return syscallProperties;
     }
+
+    public static ConfigProperties getConfigProperties() {
+        if (configProperties == null) {
+            configProperties = new ConfigProperties();
+        }
+        return configProperties;
+    }
+
+
 
     /**
      * The set of implemented instructions.
@@ -74,7 +85,6 @@ public class Globals {
     /**
      * Lock variable used at head of synchronized block to guard memory and registers
      **/
-    public static final ReentrantLock memoryAndRegistersLock = new ReentrantLock();
     /**
      * Flag to determine whether or not to produce internal debugging information.
      **/
@@ -102,10 +112,7 @@ public class Globals {
      * The current version number. Can't wait for "initialize()" call to get it.
      */
     public static final String version = "1.6";
-    /**
-     * List of accepted file extensions for RISCV assembly source files.
-     */
-    public static final ArrayList<String> fileExtensions = getFileExtensions();
+
     /**
      * Maximum length of scrolled message window (RARS Messages and Run I/O)
      */
@@ -154,6 +161,7 @@ public class Globals {
     }
 
 
+
     public static InstructionSet getInstructionSet(){
         return instructionSet;
     }
@@ -177,22 +185,22 @@ public class Globals {
 
     // Read byte limit of Run I/O or RARS Messages text to buffer.
     private static int getMessageLimit() {
-        return getIntegerProperty(configPropertiesFile, "MessageLimit", 1000000);
+        return Globals.getConfigProperties().getIntegerValue(ConfigProperties.MessageLimit);
     }
 
     // Read limit on number of error messages produced by one assemble operation.
     private static int getErrorLimit() {
-        return getIntegerProperty(configPropertiesFile, "ErrorLimit", 200);
+        return Globals.getConfigProperties().getIntegerValue(ConfigProperties.ErrorLimit);
     }
 
     // Read backstep limit (number of operations to buffer) from properties file.
     private static int getBackstepLimit() {
-        return getIntegerProperty(configPropertiesFile, "BackstepLimit", 1000);
+        return Globals.getConfigProperties().getIntegerValue(ConfigProperties.BackstepLimit);
     }
 
     // Read ASCII default display character for non-printing characters, from properties file.
     public static String getAsciiNonPrint() {
-        String anp = getPropertyEntry(configPropertiesFile, "AsciiNonPrint");
+        String anp = Globals.getConfigProperties().get(ConfigProperties.AsciiNonPrint);
         return (anp == null) ? "." : ((anp.equals("space")) ? " " : anp);
     }
 
@@ -200,7 +208,7 @@ public class Globals {
     // value is "null", substitute value of ASCII_NON_PRINT.  If string is
     // "space", substitute string containing one space character.
     public static String[] getAsciiStrings() {
-        String let = getPropertyEntry(configPropertiesFile, "AsciiTable");
+        String let = Globals.getConfigProperties().get(ConfigProperties.AsciiTable);
         String placeHolder = getAsciiNonPrint();
         if(let == null){
             // If config isn't loaded, give a decent default value.
@@ -229,44 +237,8 @@ public class Globals {
         }
     }
 
-    // Read and return integer property value for given file and property name.
-    // Default value is returned if property file or name not found.
-    private static int getIntegerProperty(String propertiesFile, String propertyName, int defaultValue) {
-        int limit = defaultValue;  // just in case no entry is found
-        Properties properties = PropertiesFile.loadPropertiesFromFile(propertiesFile);
-        try {
-            limit = Integer.parseInt(properties.getProperty(propertyName, Integer.toString(defaultValue)));
-        } catch (NumberFormatException nfe) {
-        } // do nothing, I already have a default
-        return limit;
-    }
 
 
-    // Read assembly language file extensions from properties file.  Resulting
-    // string is tokenized into array list (assume StringTokenizer default delimiters).
-    private static ArrayList<String> getFileExtensions() {
-        ArrayList<String> extensionsList = new ArrayList<>();
-        String extensions = getPropertyEntry(configPropertiesFile, "Extensions");
-        if (extensions != null) {
-            StringTokenizer st = new StringTokenizer(extensions);
-            while (st.hasMoreTokens()) {
-                extensionsList.add(st.nextToken());
-            }
-        }
-        return extensionsList;
-    }
-
-    /**
-     * Read and return property file value (if any) for requested property.
-     *
-     * @param propertiesFile name of properties file (do NOT include filename extension,
-     *                       which is assumed to be ".properties")
-     * @param propertyName   String containing desired property name
-     * @return String containing associated value; null if property not found
-     */
-    public static String getPropertyEntry(String propertiesFile, String propertyName) {
-        return PropertiesFile.loadPropertiesFromFile(propertiesFile).getProperty(propertyName);
-    }
 
     /**
      * Read any syscall number assignment overrides from config file.
@@ -274,12 +246,10 @@ public class Globals {
      * @return ArrayList of SyscallNumberOverride objects
      */
     public ArrayList<SyscallNumberOverride> getSyscallOverrides() {
-        ArrayList<SyscallNumberOverride> overrides = new ArrayList<>();
-        Properties properties = PropertiesFile.loadPropertiesFromFile(syscallPropertiesFile);
-        Enumeration keys = properties.keys();
-        while (keys.hasMoreElements()) {
-            String key = (String) keys.nextElement();
-            overrides.add(new SyscallNumberOverride(key, properties.getProperty(key)));
+        ArrayList<SyscallNumberOverride> overrides = new ArrayList<SyscallNumberOverride>();
+        Set<String> properties = Globals.getSyscallProperties().keySet();
+        for (String key : properties) {
+            overrides.add(new SyscallNumberOverride(key, Globals.getSyscallProperties().get(key)));
         }
         return overrides;
     }

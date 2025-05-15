@@ -45,13 +45,13 @@ public class SyscallProperties extends ConfigMap {
 
     public void reset() {
         put(GetCWD, "17");
-        put(LSeek, "62");
+        //put(LSeek, "62");
 
         put(PrintInt, "1");
         put(PrintFloat, "2");
         put(PrintDouble, "3");
         put(PrintString, "4");
-        put(ReadInt, "63");
+        put(ReadInt, "5");
         put(ReadFloat, "6");
         put(ReadDouble, "7");
         put(ReadString, "8");
