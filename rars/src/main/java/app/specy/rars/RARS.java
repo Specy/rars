@@ -80,12 +80,11 @@ public class RARS {
     }
 
     public void initialize(boolean startAtMain) {
-        int pc = RegisterFile.getProgramCounter();
         RegisterFile.resetRegisters();
         FloatingPointRegisterFile.resetRegisters();
         ControlAndStatusRegisterFile.resetRegisters();
         InterruptController.reset();
-        RegisterFile.initializeProgramCounter(pc);
+        RegisterFile.initializeProgramCounter(true);
         Globals.exitCode = 0;
 
         // Copy in assembled code and arguments

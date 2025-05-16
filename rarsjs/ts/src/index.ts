@@ -225,16 +225,16 @@ export interface JsProgramStatement {
  */
 export enum BackStepAction {
     MEMORY_RESTORE_RAW_WORD,
+    MEMORY_RESTORE_DOUBLE_WORD,
     MEMORY_RESTORE_WORD,
     MEMORY_RESTORE_HALF,
     MEMORY_RESTORE_BYTE,
     REGISTER_RESTORE,
     PC_RESTORE,
-    COPROC0_REGISTER_RESTORE,
-    COPROC1_REGISTER_RESTORE,
-    COPROC1_CONDITION_CLEAR,
-    COPROC1_CONDITION_SET,
-    DO_NOTHING, // instruction does not write anything.
+    CONTROL_AND_STATUS_REGISTER_RESTORE,
+    CONTROL_AND_STATUS_REGISTER_BACKDOOR,
+    FLOATING_POINT_REGISTER_RESTORE,
+    DO_NOTHING
 }
 
 /**
@@ -299,7 +299,14 @@ export enum RISCVRegisters {
 
 export type RegisterName = keyof typeof RISCVRegisters
 
-export const RISCV_REGISTERS = Object.keys(RISCVRegisters) as RegisterName[]
+function keysOfEnum<T>(e: T): string[]{
+    //@ts-ignore
+    return Object.keys(e).filter(k => isNaN(Number(k)))
+}
+
+
+export const RISCV_REGISTERS = keysOfEnum(RISCVRegisters) as RegisterName[]
+
 
 type HandlerName = keyof HandlerMap
 

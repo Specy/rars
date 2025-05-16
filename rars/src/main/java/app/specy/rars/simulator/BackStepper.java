@@ -423,7 +423,12 @@ public class BackStepper {
         }
 
         public BackStep[] getStack() {
-            return stack;
+            //get only the used part of the stack
+            BackStep[] usedStack = new BackStep[size];
+            for (int i = 0; i < size; i++) {
+                usedStack[i] = stack[(top - i + capacity) % capacity];
+            }
+            return usedStack;
         }
 
         private synchronized boolean empty() {
