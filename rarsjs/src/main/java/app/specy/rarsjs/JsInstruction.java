@@ -1,7 +1,6 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.assembler.Token;
-import app.specy.mars.mips.instructions.Instruction;
+import app.specy.rars.riscv.Instruction;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 
@@ -10,15 +9,15 @@ public class JsInstruction {
     String name;
     String example;
     String description;
-    JsMipsToken[] tokens;
+    JsRiscVToken[] tokens;
 
     public JsInstruction(Instruction ins) {
         this.name = ins.getName();
         this.example = ins.getExampleFormat();
         this.description = ins.getDescription();
-        this.tokens = new JsMipsToken[ins.getTokenList().size()];
+        this.tokens = new JsRiscVToken[ins.getTokenList().size()];
         for(int i = 0; i < ins.getTokenList().size(); i++) {
-            this.tokens[i] = new JsMipsToken(ins.getTokenList().get(i));
+            this.tokens[i] = new JsRiscVToken(ins.getTokenList().get(i));
         }
     }
 
@@ -42,7 +41,7 @@ public class JsInstruction {
 
     @JSExport
     @JSProperty
-    public JsMipsToken[] getTokens() {
+    public JsRiscVToken[] getTokens() {
         return tokens;
     }
 

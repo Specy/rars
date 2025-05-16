@@ -124,7 +124,7 @@ public class Globals {
     /**
      * Maximum number of back-step operations to buffer
      */
-    public static final int maximumBacksteps = getBackstepLimit();
+    public static int maximumBacksteps = getBackstepLimit();
     /**
      * Copyright years
      */
@@ -182,6 +182,15 @@ public class Globals {
             memory.clear(); // will establish memory configuration from setting
         }
     }
+
+    public static void setIs64Bit(boolean value) {
+        Globals.getSettings().setBooleanSetting(Settings.Bool.RV64_ENABLED, value);
+        if(!initialized) return;
+        instructionSet = new InstructionSet();
+        instructionSet.populate();
+    }
+
+
 
     // Read byte limit of Run I/O or RARS Messages text to buffer.
     private static int getMessageLimit() {

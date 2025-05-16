@@ -1,6 +1,6 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.ProgramStatement;
+import app.specy.rars.ProgramStatement;
 import org.teavm.jso.JSClass;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;

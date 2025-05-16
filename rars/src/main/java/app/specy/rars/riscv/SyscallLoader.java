@@ -116,7 +116,7 @@ public class SyscallLoader {
         if (syscallList.size() != overrides.size()) {
             System.out.println("Error: the number of entries in the config file does not match the number of syscalls loaded");
             System.out.println("Ensure there is a Syscall.properties file in the directory you are executing if you are a developer");
-            System.exit(0);
+            throw new RuntimeException();
         }
         for (SyscallNumberOverride override : overrides) {
             boolean match = false;
@@ -124,16 +124,16 @@ public class SyscallLoader {
                 if (syscall.getNumber() == override.getNumber()) {
                     System.out.println("Duplicate service number: " + syscall.getNumber() + " already registered to " +
                             findSyscall(syscall.getNumber()).getName());
-                    System.exit(0);
+                    throw new RuntimeException();
                 }
                 if (override.getName().equals(syscall.getName())) {
                     if (syscall.getNumber() != -1) {
                         System.out.println("Error: " + syscall.getName() + " was assigned a numebr twice in the config file");
-                        System.exit(0);
+                        throw new RuntimeException();
                     }
                     if (override.getNumber() < 0) {
                         System.out.println("Error: " + override.getName() + " was assigned a negative number");
-                        System.exit(0);
+                        throw new RuntimeException();
                     }
                     // we have a match to service name, assign new number
                     syscall.setNumber(override.getNumber());
@@ -143,7 +143,7 @@ public class SyscallLoader {
             if (!match) {
                 System.out.println("Error: syscall name '" + override.getName() +
                         "' in config file does not match any name in syscall list");
-                System.exit(0);
+                throw new RuntimeException();
             }
         }
         return syscallList;

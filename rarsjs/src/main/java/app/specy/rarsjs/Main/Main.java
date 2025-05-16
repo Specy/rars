@@ -1,30 +1,28 @@
-package app.specy.marsjs.Main;
+package app.specy.rarsjs.Main;
 
-import app.specy.mars.Globals;
-import app.specy.mars.MIPS;
-import app.specy.mars.mips.hardware.RegisterFile;
-import app.specy.mars.mips.instructions.SyscallLoader;
-import app.specy.marsjs.JsMIPSIO;
+import app.specy.rars.RARS;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
 public class Main {
+
     public static void main(String[] args) {
         try {
-            MIPS.initializeMIPS();
-            MIPS mips = MIPS.fromSource("""
-                li $v0, 5
-                move $t0, $v0
-                move $t0, $v0
-                move $t0, $v0
-            
-                li $t1, 20
-                add $a0, $t0, $t1
+            RARS.initializeRISCV();
+            RARS.setIo(null);
+            //TODO implement default IO
+            RARS riscv = RARS.fromSource("""
+                        li t0, 5          # Load immediate value 5 into register t0
+                        li t1, 7          # Load immediate value 7 into register t1
+                        add t2, t0, t1    # Add t0 and t1, store result in t2
                     """);
-            mips.assemble();
-            mips.initialize(true);
-            mips.simulate(1000);
-            System.out.println(RegisterFile.getUserRegister("$a0").getValue());
+            riscv.assemble();
+            riscv.initialize(true);
+            //System.out.println(riscv.hasTerminated());
+            riscv.simulate(1000);
+            //System.out.println(riscv.hasTerminated());
+            System.out.println(RegisterFile.getRegister("t2").getValue());
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
     }
 }

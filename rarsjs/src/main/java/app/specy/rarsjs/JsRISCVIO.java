@@ -1,22 +1,20 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.mips.io.MIPSIO;
-import app.specy.mars.mips.io.MIPSIOError;
-import org.teavm.jso.JSByRef;
+import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.riscv.io.RISCVIOError;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.core.*;
-import org.teavm.jso.impl.JS;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class JsMIPSIO extends MIPSIO {
+public class JsRISCVIO extends RISCVIO {
 
     private final Map<String, JSFunction> handlers = new HashMap<>();
 
     @JSExport
-    public JsMIPSIO() {
+    public JsRISCVIO() {
         super();
     }
 
@@ -81,27 +79,27 @@ public class JsMIPSIO extends MIPSIO {
 
 
     @Override
-    public int openFile(String filename, int flags, boolean append) throws MIPSIOError {
+    public int openFile(String filename, int flags, boolean append) throws RISCVIOError {
         return callIntHandler("openFile", JSString.valueOf(filename), JSNumber.valueOf(flags), JSBoolean.valueOf(append));
     }
 
     @Override
-    public void closeFile(int fileDescriptor) throws MIPSIOError {
+    public void closeFile(int fileDescriptor) throws RISCVIOError {
         callHandler("closeFile", JSNumber.valueOf(fileDescriptor));
     }
 
     @Override
-    public void writeFile(int fileDescriptor, byte[] buffer) throws MIPSIOError {
+    public void writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError {
         callHandler("writeFile", JSNumber.valueOf(fileDescriptor), JSArray.of(buffer));
     }
 
     @Override
-    public int readFile(int fileDescriptor, byte[] destination, int length) throws MIPSIOError {
+    public int readFile(int fileDescriptor, byte[] destination, int length) throws RISCVIOError {
         JSObject result = callHandler("readFile", JSNumber.valueOf(fileDescriptor), JSArray.of(destination), JSNumber.valueOf(length));
         if(result instanceof JSArray){
             JSArray<JSObject> array = (JSArray<JSObject>) result;
             if(array.getLength() != 2){
-                throw new MIPSIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
+                throw new RISCVIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
             }
             JSNumber eof = (JSNumber) array.get(0);
             JSArray<Byte> buffer = (JSArray<Byte>) array.get(1);
@@ -110,7 +108,7 @@ public class JsMIPSIO extends MIPSIO {
             }
             return eof.intValue();
         }
-        throw new MIPSIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
+        throw new RISCVIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
     }
 
     @Override

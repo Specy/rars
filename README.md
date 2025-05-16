@@ -1,13 +1,21 @@
+[![npm](https://img.shields.io/npm/v/@specy/risc-v.svg)](https://www.npmjs.com/package/@specy/risc-v)
+
+This project is a fork of the [RARS RISC-V simulator](https://github.com/TheThirdOne/rars) for the RISC-V instruction set.
+
+It has been designed to decouple the UI from the core simulator, providing a Typescript library that compiles the simulator to JavaScript and offers a simple interface to interact with it.
+
+If you are looking for the original RISC-V RARS, you can find it [here](https://github.com/TheThirdOne/rars).
+
 # RiscV-js
-This is a Typescript implementation of a RISC-V simulator made by compiling the [RARS RISC-V simulator](https://github.com/TheThirdOne/rars) to Javascript. 
-It is part of a family of javascript assembly interpreters/simulators: 
+This is a Typescript implementation of a RISC-V simulator made by compiling the [RARS RISC-V simulator](https://github.com/TheThirdOne/rars) to Javascript.
+It is part of a family of javascript assembly interpreters/simulators:
 
 - MIPS: [git repo](https://github.com/Specy/mars),  [npm package](https://www.npmjs.com/package/@specy/mips)
 - RISC-V: [git repo](https://github.com/Specy/rars), [npm package](https://www.npmjs.com/package/@specy/risc-v)
 - X86: [git repo](https://github.com/Specy/x86-js), [npm package](https://www.npmjs.com/package/@specy/x86)
 - M68K: [git repo](https://github.com/Specy/s68k), [npm package](https://www.npmjs.com/package/@specy/s68k)
 
-## Usage 
+## Usage
 
 First, create an instance of the simulator with the `RISCV.makeRiscvFromSource` function.
 

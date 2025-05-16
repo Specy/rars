@@ -100,7 +100,7 @@
                         <configuration>
                             <targetDirectory>${project.basedir}/ts/src/generated</targetDirectory>
                             <targetFileName>rars.js</targetFileName>
-                            <mainClass>app.specy.rarsjs.JsMips</mainClass>
+                            <mainClass>app.specy.rarsjs.JsRiscV</mainClass>
                             <debugInformationGenerated>true</debugInformationGenerated>
                             <sourceMapsGenerated>true</sourceMapsGenerated>
                             <minifying>false</minifying>

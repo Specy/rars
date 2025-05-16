@@ -4,8 +4,6 @@ import app.specy.rars.config.SettingsProperties;
 
 import java.util.HashMap;
 import java.util.Observable;
-import java.util.prefs.BackingStoreException;
-import java.util.prefs.Preferences;
 
 /*
 Copyright (c) 2003-2013,  Pete Sanderson and Kenneth Vollmar
@@ -147,7 +145,7 @@ public class Settings extends Observable {
         /**
          * Flag to determine whether a program uses rv64i instead of rv32i
          */
-        RV64_ENABLED("rv64Enabled", true),
+        RV64_ENABLED("rv64Enabled", false),
         /**
          * Flag to determine whether to calculate relative paths from the current working directory
          * or from the RARS executable path.
@@ -220,7 +218,6 @@ public class Settings extends Observable {
 
     private HashMap<Bool, Boolean> booleanSettingsValues;
     private String[] stringSettingsValues;
-    private Preferences preferences;
 
     /**
      * Create Settings object and set to saved values.  If saved values not found, will set
@@ -231,7 +228,6 @@ public class Settings extends Observable {
     public Settings() {
         booleanSettingsValues = new HashMap<>();
         stringSettingsValues = new String[stringSettingsKeys.length];
-        preferences = Preferences.userNodeForPackage(this.getClass());
         initialize();
     }
 
@@ -354,7 +350,6 @@ public class Settings extends Observable {
     private void initialize() {
         applyDefaultSettings();
         readSettingsFromProperties();
-        getSettingsFromPreferences();
     }
 
     // Default values.  Will be replaced if available from property file or Preferences object.
@@ -371,7 +366,6 @@ public class Settings extends Observable {
     private void internalSetBooleanSetting(Bool setting, boolean value) {
         if (value != booleanSettingsValues.get(setting)) {
             booleanSettingsValues.put(setting, value);
-            saveBooleanSetting(setting.getName(),value);
             setChanged();
             notifyObservers();
         }
@@ -380,7 +374,6 @@ public class Settings extends Observable {
     // Used by setter method(s) for string-based settings (initially, only exception handler name)
     private void setStringSetting(int settingIndex, String value) {
         stringSettingsValues[settingIndex] = value;
-        saveStringSetting(settingIndex);
     }
 
 
@@ -421,45 +414,6 @@ public class Settings extends Observable {
     }
 
 
-    // Get settings values from Preferences object.  A key-value pair will only be written
-    // to Preferences if/when the value is modified.  If it has not been modified, the default value
-    // will be returned here.
-    //
-    // PRECONDITION: Values arrays have already been initialized to default values from
-    // Settings.properties file or default value arrays above!
-    private void getSettingsFromPreferences() {
-        for (Bool setting : booleanSettingsValues.keySet()) {
-            booleanSettingsValues.put(setting, preferences.getBoolean(setting.getName(), booleanSettingsValues.get(setting)));
-        }
-        for (int i = 0; i < stringSettingsKeys.length; i++) {
-            stringSettingsValues[i] = preferences.get(stringSettingsKeys[i], stringSettingsValues[i]);
-        }
-    }
 
-
-    // Save the key-value pair in the Properties object and assure it is written to persisent storage.
-    private void saveBooleanSetting(String name,boolean value) {
-        try {
-            preferences.putBoolean(name, value);
-            preferences.flush();
-        } catch (SecurityException se) {
-            // cannot write to persistent storage for security reasons
-        } catch (BackingStoreException bse) {
-            // unable to communicate with persistent storage (strange days)
-        }
-    }
-
-
-    // Save the key-value pair in the Properties object and assure it is written to persisent storage.
-    private void saveStringSetting(int index) {
-        try {
-            preferences.put(stringSettingsKeys[index], stringSettingsValues[index]);
-            preferences.flush();
-        } catch (SecurityException se) {
-            // cannot write to persistent storage for security reasons
-        } catch (BackingStoreException bse) {
-            // unable to communicate with persistent storage (strange days)
-        }
-    }
 
 }

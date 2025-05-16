@@ -3,16 +3,12 @@ package app.specy.rars;
 import java.util.ArrayList;
 import java.util.List;
 
-import app.specy.rars.assembler.SymbolTable;
 import app.specy.rars.assembler.TokenList;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.hardware.*;
-import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.InstructionSet;
-import app.specy.rars.riscv.SyscallLoader;
 import app.specy.rars.riscv.io.RISCVIO;
-import app.specy.rars.simulator.ProgramArgumentList;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
@@ -21,7 +17,7 @@ public class RARS {
     private ArrayList<RISCVprogram> programs;
     private RISCVprogram main;
     private static RISCVIO io;
-    private Simulator.Reason terminated = Simulator.Reason.STOP;
+    private Simulator.Reason stopReason = null;
 
 
     public static void setIo(RISCVIO io) {
@@ -115,18 +111,31 @@ public class RARS {
     }
 
     public Simulator.Reason simulate(int[] breakpoints) throws SimulationException {
-        terminated = this.main.simulate(-1, breakpoints);
-        return terminated; //TODO
+        stopReason = this.main.simulate(-1, breakpoints);
+        return stopReason;
     }
+    public Simulator.Reason simulate(int limit, int[] breakpoints) throws SimulationException {
+        stopReason = this.main.simulate(limit, breakpoints);
+        return stopReason;
+    }
+
     public Simulator.Reason simulate(int limit) throws SimulationException {
-        terminated = this.main.simulate(limit);
-        return terminated;
+        stopReason = this.main.simulate(limit);
+        return stopReason;
+    }
+
+    public static void setIs64Bit(boolean is64Bit) {
+        Globals.setIs64Bit(is64Bit);
     }
 
 
     public Simulator.Reason step() throws SimulationException {
-        terminated = this.main.simulate(1);
-        return terminated;
+        stopReason = this.main.simulate(1);
+        return stopReason;
+    }
+
+    public Simulator.Reason getStopReason() {
+        return stopReason;
     }
 
     public RISCVprogram getProgram() {
@@ -141,8 +150,7 @@ public class RARS {
     }
 
     public boolean hasTerminated(){
-        return false;
-        //return terminated; TODO
+        return stopReason == Simulator.Reason.CLIFF_TERMINATION;
     }
 
     public Simulator getSimulator() {

@@ -1,5 +1,5 @@
 //@ts-ignore
-import {makeMipsfromSource as _makeMipsfromSource, initializeMIPS as _initializeMIPS, getInstructionSet as _getInstructionSet} from './generated/mars'
+import {makeRiscVfromSource as _makeRiscVfromSource, initializeRISCV as _initializeRISCV, getInstructionSet as _getInstructionSet, setIs64Bit as _setIs64Bit} from './generated/rars'
 
 
 export type JsInstructionToken = {
@@ -10,13 +10,23 @@ export type JsInstructionToken = {
     type: string
 }
 
+export enum StopReason {
+    BREAKPOINT,
+    EXCEPTION,
+    MAX_STEPS,         // includes step mode (where maxSteps is 1)
+    NORMAL_TERMINATION,
+    CLIFF_TERMINATION, // run off bottom of program
+    PAUSE,
+    STOP
+}
+
 
 
 /*
-public abstract int openFile(String filename, int flags, boolean append) throws MIPSIOError;
-    public abstract void closeFile(int fileDescriptor) throws MIPSIOError;
-    public abstract void writeFile(int fileDescriptor, byte[] buffer) throws MIPSIOError;
-    public abstract int readFile(int fileDescriptor, byte[] destination, int length) throws MIPSIOError;
+public abstract int openFile(String filename, int flags, boolean append) throws RISCVIOError;
+    public abstract void closeFile(int fileDescriptor) throws RISCVIOError;
+    public abstract void writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError;
+    public abstract int readFile(int fileDescriptor, byte[] destination, int length) throws RISCVIOError;
 
 
     // 0 ---> meaning Yes
@@ -123,12 +133,12 @@ export type JsInstruction = {
     tokens: JsInstructionToken[];
 }
 
-export type MipsTokenizedLine = {
+export type RiscvTokenizedLine = {
     line: string;
     tokens: JsInstructionToken[]
 }
 
-export type MIPSAssembleError = {
+export type RISCVAssembleError = {
     isWarning: boolean
     message: string
     macroExpansionHistory: string
@@ -137,22 +147,25 @@ export type MIPSAssembleError = {
     columnNumber: number
 }
 
-export type MIPSAssembleResult = {
+export type RISCVAssembleResult = {
     report: string
-    errors: MIPSAssembleError[]
+    errors: RISCVAssembleError[]
     hasErrors: boolean
 }
 
 
-export class MIPS {
-    public static makeMipsFromSource = makeMipsfromSource
-    public static initializeMIPS = initializeMIPS
+export class RISCV {
+    public static makeRiscVFromSource = makeRiscVfromSource
+    public static initializeRISCV = initializeRISCV
     public static getInstructionSet(){
         return _getInstructionSet() as JsInstruction[]
     }
+    public static setIs64Bit(is64Bit: boolean) {
+        _setIs64Bit(is64Bit)
+    }
 }
 
-export type JsMipsStackFrame = {
+export type JsRiscVStackFrame = {
     /**
      * The program counter value at the moment the stack frame was created.
      */
@@ -248,42 +261,45 @@ export interface JsBackStep {
     readonly pc: number;
 }
 
-/**
- * All MIPS register names.
- */
-export type RegisterName =
-    '$zero'
-    | '$at'
-    | '$v0'
-    | '$v1'
-    | '$a0'
-    | '$a1'
-    | '$a2'
-    | '$a3'
-    | '$t0'
-    | '$t1'
-    | '$t2'
-    | '$t3'
-    | '$t4'
-    | '$t5'
-    | '$t6'
-    | '$t7'
-    | '$s0'
-    | '$s1'
-    | '$s2'
-    | '$s3'
-    | '$s4'
-    | '$s5'
-    | '$s6'
-    | '$s7'
-    | '$t8'
-    | '$t9'
-    | '$k0'
-    | '$k1'
-    | '$gp'
-    | '$sp'
-    | '$fp'
-    | '$ra';
+
+export enum RISCVRegisters {
+    zero = 0,
+    ra = 1,
+    sp = 2,
+    gp = 3,
+    tp = 4,
+    t0 = 5,
+    t1 = 6,
+    t2 = 7,
+    s0 = 8,
+    s1 = 9,
+    a0 = 10,
+    a1 = 11,
+    a2 = 12,
+    a3 = 13,
+    a4 = 14,
+    a5 = 15,
+    a6 = 16,
+    a7 = 17,
+    s2 = 18,
+    s3 = 19,
+    s4 = 20,
+    s5 = 21,
+    s6 = 22,
+    s7 = 23,
+    s8 = 24,
+    s9 = 25,
+    s10 = 26,
+    s11 = 27,
+    t3 = 28,
+    t4 = 29,
+    t5 = 30,
+    t6 = 31,
+}
+
+export type RegisterName = keyof typeof RISCVRegisters
+
+export const RISCV_REGISTERS = Object.keys(RISCVRegisters) as RegisterName[]
 
 type HandlerName = keyof HandlerMap
 
@@ -292,9 +308,9 @@ export type HandlerMapFns = {
     [K in HandlerName]: (...args: HandlerMap[K]['in']) => HandlerMap[K]['out']
 }
 
-export function registerHandlers(mips: JsMips, handlers: HandlerMapFns) {
+export function registerHandlers(riscv: JsRiscV, handlers: HandlerMapFns) {
     for (const [name, handler] of Object.entries(handlers)) {
-        mips.registerHandler(name as HandlerName, handler as (...args: HandlerMap[HandlerName]['in']) => HandlerMap[HandlerName]['out'])
+        riscv.registerHandler(name as HandlerName, handler as (...args: HandlerMap[HandlerName]['in']) => HandlerMap[HandlerName]['out'])
     }
 }
 
@@ -305,13 +321,13 @@ export function unimplementedHandler(name: HandlerName) {
 }
 
 /**
- * Interface for interacting with a MIPS simulator.
+ * Interface for interacting with a RISCV simulator.
  */
-export interface JsMips {
+export interface JsRiscV {
     /**
      * Assembles the program.
      */
-    assemble(): MIPSAssembleResult;
+    assemble(): RISCVAssembleResult;
 
     /**
      * Initializes the simulator.
@@ -319,11 +335,18 @@ export interface JsMips {
      */
     initialize(startAtMain: boolean): void;
 
+
+
+    /**
+     * Gets the current stop reason.
+     */
+    getStopReason(): StopReason;
+
     /**
      * Executes a single instruction.
      * @returns True if the execution is complete, false otherwise.
      */
-    step(): boolean;
+    step(): StopReason;
 
 
     /**
@@ -357,7 +380,7 @@ export interface JsMips {
     getStatementAtSourceLine(line: number): JsProgramStatement;
 
 
-    getTokenizedLines(): MipsTokenizedLine[]
+    getTokenizedLines(): RiscvTokenizedLine[]
     /**
      * Checks if the simulation can be undone.
      * @returns True if the simulation can be undone, false otherwise.
@@ -370,7 +393,7 @@ export interface JsMips {
      * Gets the call stack.
      * @returns An array of memory addresses representing the call stack.
      */
-    getCallStack(): JsMipsStackFrame[]
+    getCallStack(): JsRiscVStackFrame[]
 
 
 
@@ -382,11 +405,6 @@ export interface JsMips {
 
 
     getParsedStatements(): JsInstructionToken[]
-
-
-    getHi(): number;
-
-    getLo(): number;
 
 
     /**
@@ -403,18 +421,23 @@ export interface JsMips {
     setUndoEnabled(enabled: boolean): void;
 
     /**
+     * Simulates until the stop condition is met. it might be a breakpoint, exception, etc...
+     */
+    simulate(): StopReason;
+
+    /**
      * Simulates the program for a limited number of instructions.
      * @param limit The maximum number of instructions to execute.
      * @returns True if the execution is complete, false otherwise.
      */
-    simulateWithLimit(limit: number): boolean;
+    simulateWithLimit(limit: number): StopReason;
 
     /**
      * Simulates the program until a breakpoint is reached.
      * @param breakpoints An array of memory addresses where the simulation should pause.
      * @returns True if the execution is complete, false otherwise.
      */
-    simulateWithBreakpoints(breakpoints: number[]): boolean;
+    simulateWithBreakpoints(breakpoints: number[]): StopReason;
 
     /**
      * Simulates the program with both breakpoints and a limit.
@@ -422,7 +445,7 @@ export interface JsMips {
      * @param limit The maximum number of instructions to execute.
      * @returns True if the execution is complete, false otherwise.
      */
-    simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): boolean;
+    simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): StopReason;
 
     /**
      * Gets the value of a register.
@@ -506,18 +529,18 @@ export interface JsMips {
 
 
 /**
- * Creates a new MIPS simulator from the given source code.
+ * Creates a new RISCV simulator from the given source code.
  * @param source The source code to assemble.
- * @returns A new `JsMips` object.
+ * @returns A new `JsRiscV` object.
  */
-function makeMipsfromSource(source: string): JsMips {
-    initializeMIPS()
-    return _makeMipsfromSource(source) as JsMips
+function makeRiscVfromSource(source: string): JsRiscV {
+    _initializeRISCV()
+    return _makeRiscVfromSource(source) as JsRiscV
 }
 
 /**
- * Initializes the MIPS simulator.
+ * Initializes the RISCV simulator.
  */
-function initializeMIPS(): void {
-    _initializeMIPS()
+function initializeRISCV(): void {
+    _initializeRISCV()
 }

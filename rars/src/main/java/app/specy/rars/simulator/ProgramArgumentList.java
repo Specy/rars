@@ -193,7 +193,7 @@ public class ProgramArgumentList {
             RegisterFile.getRegister("a1").setValue(stackAddress + Memory.WORD_LENGTH_BYTES + Memory.WORD_LENGTH_BYTES); // argv
         } catch (AddressErrorException aee) {
             System.out.println("Internal Error: Memory write error occurred while storing program arguments! " + aee);
-            System.exit(0);
+            throw new RuntimeException();
         }
     }
 

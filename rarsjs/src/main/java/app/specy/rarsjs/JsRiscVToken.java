@@ -1,17 +1,17 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.assembler.Token;
+import app.specy.rars.assembler.Token;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 
-public class JsMipsToken {
+public class JsRiscVToken {
     int sourceLine;
     int sourceColumn;
     int originalSourceLine;
     String value;
     String type;
 
-    public JsMipsToken(Token token) {
+    public JsRiscVToken(Token token) {
         this.sourceLine = token.getSourceLine();
         this.sourceColumn = token.getStartPos();
         this.originalSourceLine = token.getOriginalSourceLine();

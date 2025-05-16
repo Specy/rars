@@ -82,6 +82,11 @@ public class BackStepper {
         backSteps = new BackstepStack(Globals.maximumBacksteps);
     }
 
+    public BackstepStack getBackStepsStack() {
+        return backSteps;
+    }
+
+
     /**
      * Determine whether execution "undo" steps are currently being recorded.
      *
@@ -172,7 +177,7 @@ public class BackStepper {
                 } catch (Exception e) {
                     // if the original action did not cause an exception this will not either.
                     System.out.println("Internal RARS error: address exception while back-stepping.");
-                    System.exit(0);
+                    throw new RuntimeException();
                 }
             } while (!backSteps.empty() && statement == backSteps.peek().ps);
             engaged = true;  // RESET IT (was disabled at top of loop -- see comment)
@@ -330,7 +335,7 @@ public class BackStepper {
 
 
     // Represents a "back step" (undo action) on the stack.
-    private class BackStep {
+    public class BackStep {
         private Action action;  // what do do MEMORY_RESTORE_WORD, etc
         private int pc;      // program counter value when original step occurred
         private ProgramStatement ps;   // statement whose action is being "undone" here
@@ -365,6 +370,23 @@ public class BackStepper {
          								 " parm1 "+param1+" parm2 "+param2);
          */
         }
+
+        public int getAction() {
+            if(action == null) return -1;
+            return action.ordinal();
+        }
+
+        public int getPc() {
+            return pc;
+        }
+
+        public int getParam1() {
+            return param1;
+        }
+
+        public long getParam2() {
+            return param2;
+        }
     }
 
     // *****************************************************************************
@@ -380,7 +402,7 @@ public class BackStepper {
     // regardless of how many steps are executed.  This will speed things up a bit
     // and make life easier for the garbage collector.
 
-    private class BackstepStack {
+    public class BackstepStack {
         private final int capacity;
         private int size;
         private int top;
@@ -398,6 +420,10 @@ public class BackStepper {
             for (int i = 0; i < capacity; i++) {
                 this.stack[i] = new BackStep();
             }
+        }
+
+        public BackStep[] getStack() {
+            return stack;
         }
 
         private synchronized boolean empty() {

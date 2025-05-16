@@ -1,13 +1,13 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 
-public class JsMipsTokenizedLine {
+public class JsRiscVTokenizedLine {
     String line;
-    JsMipsToken[] tokens;
+    JsRiscVToken[] tokens;
 
-    public JsMipsTokenizedLine(String line, JsMipsToken[] tokens) {
+    public JsRiscVTokenizedLine(String line, JsRiscVToken[] tokens) {
         this.line = line;
         this.tokens = tokens;
     }
@@ -20,7 +20,7 @@ public class JsMipsTokenizedLine {
 
     @JSExport
     @JSProperty
-    public JsMipsToken[] getTokens() {
+    public JsRiscVToken[] getTokens() {
         return tokens;
     }
 }

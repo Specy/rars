@@ -1,7 +1,7 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.ErrorList;
-import app.specy.mars.ErrorMessage;
+import app.specy.rars.ErrorList;
+import app.specy.rars.ErrorMessage;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 

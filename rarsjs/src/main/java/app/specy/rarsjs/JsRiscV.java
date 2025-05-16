@@ -1,13 +1,10 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.Globals;
-import app.specy.mars.MIPS;
-import app.specy.mars.ProcessingException;
-import app.specy.mars.ProgramStatement;
-import app.specy.mars.mips.hardware.AddressErrorException;
-import app.specy.mars.mips.hardware.Coprocessor1;
-import app.specy.mars.mips.hardware.Register;
-import app.specy.mars.mips.hardware.RegisterFile;
+import app.specy.rars.*;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.Register;
+import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.simulator.Simulator;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 import org.teavm.jso.core.JSFunction;
@@ -16,51 +13,51 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class JsMips {
-    private MIPS main;
-    private static JsMIPSIO ioHandler;
+public class JsRiscV {
+    private RARS main;
+    private static JsRISCVIO ioHandler;
 
-    private JsMips(MIPS main) {
+    private JsRiscV(RARS main) {
         this.main = main;
     }
 
-    private static JsMIPSIO getIOHandler() {
+    private static JsRISCVIO getIOHandler() {
         if (ioHandler == null) {
-            ioHandler = new JsMIPSIO();
-            MIPS.setIo(ioHandler);
+            ioHandler = new JsRISCVIO();
+            RARS.setIo(ioHandler);
         }
         return ioHandler;
     }
 
     @JSExport
-    public static void initializeMIPS() {
-        MIPS.initializeMIPS();
+    public static void initializeRISCV() {
+        RARS.initializeRISCV();
     }
 
     @JSExport
-    public static JsMips makeMipsfromSource(String source) throws ProcessingException {
-        JsMips.getIOHandler(); // Ensure that the IO handler is initialized
-        return new JsMips(MIPS.fromSource(source));
+    public static JsRiscV makeRiscVfromSource(String source) throws AssemblyException {
+        JsRiscV.getIOHandler(); // Ensure that the IO handler is initialized
+        return new JsRiscV(RARS.fromSource(source));
     }
 
     @JSExport
-    public JsCompilationResult assemble() throws ProcessingException {
+    public JsCompilationResult assemble() {
         try{
             return new JsCompilationResult(this.main.assemble());
-        }catch (ProcessingException e) {
+        }catch (AssemblyException e) {
             return new JsCompilationResult(e.errors());
         }
     }
 
     @JSExport
-    public JsMipsTokenizedLine[] getTokenizedLines() {
+    public JsRiscVTokenizedLine[] getTokenizedLines() {
         return this.main.getTokens().stream().map((v) -> {
-            JsMipsToken[] tokens = new JsMipsToken[v.size()];
+            JsRiscVToken[] tokens = new JsRiscVToken[v.size()];
             for (int i = 0; i < v.size(); i++) {
-                tokens[i] = new JsMipsToken(v.get(i));
+                tokens[i] = new JsRiscVToken(v.get(i));
             }
-            return new JsMipsTokenizedLine(v.getProcessedLine(), tokens);
-        }).toArray(JsMipsTokenizedLine[]::new);
+            return new JsRiscVTokenizedLine(v.getProcessedLine(), tokens);
+        }).toArray(JsRiscVTokenizedLine[]::new);
     }
 
     @JSExport
@@ -69,12 +66,22 @@ public class JsMips {
     }
 
     @JSExport
-    public boolean step() throws ProcessingException {
+    public Simulator.Reason step() throws SimulationException {
         return this.main.step();
     }
 
     @JSExport
-    public boolean simulateWithLimit(int limit) throws ProcessingException {
+    public Simulator.Reason getStopReason() {
+        return this.main.getStopReason();
+    }
+
+    @JSExport
+    public Simulator.Reason simulate() throws SimulationException {
+        return this.main.simulate(-1);
+    }
+
+    @JSExport
+    public Simulator.Reason simulateWithLimit(int limit) throws SimulationException {
         return this.main.simulate(limit);
     }
 
@@ -92,6 +99,7 @@ public class JsMips {
         return this.main.getLabelAtAddress(address);
     }
 
+   /*
     @JSExport
     public int[] getConditionFlags() {
         int[] flags = new int[8];
@@ -100,21 +108,29 @@ public class JsMips {
         }
         return flags;
     }
+    */
 
     @JSExport
-    public boolean simulateWithBreakpoints(int[] breakpoints) throws ProcessingException {
+    public Simulator.Reason simulateWithBreakpoints(int[] breakpoints) throws SimulationException {
         return this.main.simulate(breakpoints);
     }
 
     @JSExport
-    public boolean simulateWithBreakpointsAndLimit(int[] breakpoints, int limit) throws ProcessingException {
-        return this.main.simulate(breakpoints, limit);
+    public Simulator.Reason simulateWithBreakpointsAndLimit(int[] breakpoints, int limit) throws SimulationException {
+        return this.main.simulate(limit, breakpoints);
     }
 
     @JSExport
     public int getRegisterValue(String register) {
-        return RegisterFile.getUserRegister(register).getValue();
+        return (int) RegisterFile.getRegister(register).getValue();
     }
+
+    /*
+    @JSExport
+    public long getRegisterValueLong(String register) {
+        return RegisterFile.getRegister(register).getValue();
+    }
+    */
 
     @JSExport
     public void registerHandler(String name, JSFunction handler) {
@@ -124,7 +140,20 @@ public class JsMips {
     @JSProperty
     @JSExport
     public int getStackPointer() {
-        return RegisterFile.getUserRegister("$sp").getValue();
+        return (int) RegisterFile.getStackPointerRegister().getValue();
+    }
+
+    /*
+    @JSProperty
+    @JSExport
+    public long getStackPointerLong() {
+        return RegisterFile.getStackPointerRegister().getValue();
+    }
+    */
+
+    @JSExport()
+    public void setIs64Bit(boolean is64Bit) {
+        RARS.setIs64Bit(is64Bit);
     }
 
     @JSProperty
@@ -133,21 +162,17 @@ public class JsMips {
         return RegisterFile.getProgramCounter();
     }
 
+    /*
+    @JSExport
+    public long[] getRegistersValuesLong() {
+        return Arrays.stream(RegisterFile.getRegisters()).mapToLong(Register::getValue).toArray();
+    }
+    */
     @JSExport
     public int[] getRegistersValues() {
-        return Arrays.stream(RegisterFile.getRegisters()).mapToInt(Register::getValue).toArray();
+        return Arrays.stream(RegisterFile.getRegisters()).mapToInt((v) -> (int) v.getValue()).toArray();
     }
 
-
-    @JSExport
-    public int getHi(){
-        return RegisterFile.getValue(33);
-    }
-
-    @JSExport
-    public int getLo(){
-        return RegisterFile.getValue(34);
-    }
 
     @JSExport
     public JsBackStep[] getUndoStack() {
@@ -239,12 +264,12 @@ public class JsMips {
 
     @JSExport
     public static JsInstruction[] getInstructionSet() {
-        return MIPS.getInstructionSet().getInstructionList().stream().map(JsInstruction::new).toArray(JsInstruction[]::new);
+        return RARS.getInstructionSet().getInstructionList().stream().map(JsInstruction::new).toArray(JsInstruction[]::new);
     }
 
     @JSExport
     public void setRegisterValue(String register, int value) {
-        RegisterFile.getUserRegister(register).setValue(value);
+        RegisterFile.getRegister(register).setValue(value);
     }
 
     @JSProperty

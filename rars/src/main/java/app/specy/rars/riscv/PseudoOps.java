@@ -280,12 +280,9 @@ public class PseudoOps {
             "fgt.d t1, f2, f3      ;flt.d RG1, RG3, RG2 ;#Floating Greater Than (64 bit): if f2 > f3, set t1 to 1, else set t1 to 0",
             "fge.d t1, f2, f3      ;fle.d RG1, RG3, RG2 ;#Floating Greater Than or Equal (64 bit): if f2 >= f3, set t1 to 1, else set t1 to 0",
 
+    };
+    public static final String[] PSEUDO_OPS_64 = {
 
-
-
-            //* 64-bit instructions
-
-            /*
             "# Templates that override 32 bit templates in the case that the 32 bit version doesn't work",
             "# This needs to be here because it should have priority over the other li's",
             "li t1,-100     ;addi RG1, x0, VL2                ;#Load Immediate : Set t1 to 12-bit immediate (sign-extended)",
@@ -322,11 +319,5 @@ public class PseudoOps {
             "ld t1,10000000 ;lui   RG1, VH2  ;ld RG1, VL2(RG1)  ;#Load Double word : Set t1 to contents of effective memory word address",
             "ld t1,label	   ;auipc RG1, PCH2 ;ld RG1, PCL2(RG1) ;#Load Double word : Set t1 to contents of memory word at label's address",
             "ld t1,%lo(label)(t2)  ;ld RG1,LL4(RG7)  ;#Load from Address",
-
-             */
-
-
-
-
     };
 }

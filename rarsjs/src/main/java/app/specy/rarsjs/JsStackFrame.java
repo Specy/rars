@@ -1,6 +1,6 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.mips.hardware.StackFrame;
+import app.specy.rars.riscv.hardware.StackFrame;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 

@@ -1,6 +1,6 @@
-package app.specy.marsjs;
+package app.specy.rarsjs;
 
-import app.specy.mars.simulator.BackStepper;
+import app.specy.rars.simulator.BackStepper;
 import org.teavm.jso.JSClass;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
@@ -18,7 +18,7 @@ public class JsBackStep {
         this.action = backStep.getAction();
         this.pc = backStep.getPc();
         this.param1 = backStep.getParam1();
-        this.param2 = backStep.getParam2();
+        this.param2 = (int) backStep.getParam2();
     }
 
 

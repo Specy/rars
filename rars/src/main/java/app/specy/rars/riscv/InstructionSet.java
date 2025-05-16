@@ -130,7 +130,13 @@ public class InstructionSet {
         String pseudoOp, template, token;
         String description;
         StringTokenizer tokenizer;
-        for (String line : PseudoOps.PSEUDO_OPS) {
+
+        List<String> pseudoOps = new ArrayList<>(List.of(PseudoOps.PSEUDO_OPS));
+        if(rv64){
+            pseudoOps.addAll(List.of(PseudoOps.PSEUDO_OPS_64));
+        }
+
+        for (String line : pseudoOps) {
             // skip over: comment lines, empty lines, lines starting with blank.
             if (!line.startsWith("#") && !line.startsWith(" ")
                     && line.length() > 0) {
@@ -308,8 +314,6 @@ public class InstructionSet {
     private void addBasicInstructions() {
         instructionList.add(new ADD());
         instructionList.add(new ADDI());
-        instructionList.add(new ADDIW());
-        instructionList.add(new ADDW());
         instructionList.add(new AND());
         instructionList.add(new ANDI());
         instructionList.add(new AUIPC());
@@ -327,26 +331,18 @@ public class InstructionSet {
         instructionList.add(new CSRRWI());
         instructionList.add(new DIV());
         instructionList.add(new DIVU());
-        instructionList.add(new DIVUW());
-        instructionList.add(new DIVW());
         instructionList.add(new EBREAK());
         instructionList.add(new ECALL());
         instructionList.add(new FADDD());
         instructionList.add(new FADDS());
         instructionList.add(new FCLASSD());
         instructionList.add(new FCLASSS());
-        instructionList.add(new FCVTDL());
-        instructionList.add(new FCVTDLU());
         instructionList.add(new FCVTDS());
         instructionList.add(new FCVTDW());
         instructionList.add(new FCVTDWU());
-        instructionList.add(new FCVTLD());
-        instructionList.add(new FCVTLS());
-        instructionList.add(new FCVTLUD());
-        instructionList.add(new FCVTLUS());
         instructionList.add(new FCVTSD());
-        instructionList.add(new FCVTSL());
-        instructionList.add(new FCVTSLU());
+
+
         instructionList.add(new FCVTSW());
         instructionList.add(new FCVTSWU());
         instructionList.add(new FCVTWD());
@@ -375,9 +371,7 @@ public class InstructionSet {
         instructionList.add(new FMSUBS());
         instructionList.add(new FMULD());
         instructionList.add(new FMULS());
-        instructionList.add(new FMVDX());
         instructionList.add(new FMVSX());
-        instructionList.add(new FMVXD());
         instructionList.add(new FMVXS());
         instructionList.add(new FNMADDD());
         instructionList.add(new FNMADDS());
@@ -399,52 +393,80 @@ public class InstructionSet {
         instructionList.add(new JALR());
         instructionList.add(new LB());
         instructionList.add(new LBU());
-        instructionList.add(new LD());
+
         instructionList.add(new LH());
         instructionList.add(new LHU());
         instructionList.add(new LUI());
         instructionList.add(new LW());
-        instructionList.add(new LWU());
+
         instructionList.add(new MUL());
         instructionList.add(new MULH());
         instructionList.add(new MULHSU());
         instructionList.add(new MULHU());
-        instructionList.add(new MULW());
         instructionList.add(new OR());
         instructionList.add(new ORI());
         instructionList.add(new REM());
         instructionList.add(new REMU());
-        instructionList.add(new REMUW());
-        instructionList.add(new REMW());
+
         instructionList.add(new SB());
-        instructionList.add(new SD());
         instructionList.add(new SH());
         instructionList.add(new SLL());
         instructionList.add(new SLLI());
-        instructionList.add(new SLLI64());
-        instructionList.add(new SLLIW());
-        instructionList.add(new SLLW());
+
+
+
         instructionList.add(new SLT());
         instructionList.add(new SLTI());
         instructionList.add(new SLTIU());
         instructionList.add(new SLTU());
         instructionList.add(new SRA());
         instructionList.add(new SRAI());
-        instructionList.add(new SRAI64());
-        instructionList.add(new SRAIW());
-        instructionList.add(new SRAW());
+
         instructionList.add(new SRL());
         instructionList.add(new SRLI());
-        instructionList.add(new SRLI64());
-        instructionList.add(new SRLIW());
-        instructionList.add(new SRLW());
         instructionList.add(new SUB());
-        instructionList.add(new SUBW());
         instructionList.add(new SW());
         instructionList.add(new URET());
         instructionList.add(new WFI());
         instructionList.add(new XOR());
         instructionList.add(new XORI());
+
+        if(InstructionSet.rv64){
+            instructionList.add(new ADDW());
+            instructionList.add(new ADDIW());
+            instructionList.add(new DIVUW());
+            instructionList.add(new DIVW());
+
+            instructionList.add(new FCVTDL());
+            instructionList.add(new FCVTDLU());
+            instructionList.add(new FCVTLD());
+            instructionList.add(new FCVTLS());
+            instructionList.add(new FCVTLUD());
+            instructionList.add(new FCVTLUS());
+            instructionList.add(new FCVTSL());
+            instructionList.add(new FCVTSLU());
+            instructionList.add(new FMVDX());
+            instructionList.add(new FMVXD());
+            instructionList.add(new LD());
+            instructionList.add(new LWU());
+            instructionList.add(new MULW());
+            instructionList.add(new REMUW());
+            instructionList.add(new REMW());
+            instructionList.add(new SD());
+            instructionList.add(new SLLIW());
+            instructionList.add(new SLLW());
+            instructionList.add(new SRAIW());
+            instructionList.add(new SRAW());
+            instructionList.add(new SRLIW());
+            instructionList.add(new SRLW());
+            instructionList.add(new SUBW());
+
+
+            instructionList.add(new SRAI64());
+            instructionList.add(new SLLI64());
+            instructionList.add(new SRLI64());
+        }
+
 
     }
 }
