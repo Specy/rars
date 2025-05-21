@@ -71,10 +71,4 @@ public class AddressErrorException extends Exception {
     public int getType() {
         return type;
     }
-
-    public String toString(){
-        return "AddressErrorException: " + getMessage() + " at " +
-                "Address: " + Binary.intToHexString(address) +
-                " Type: " + type;
-    }
 }

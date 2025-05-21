@@ -44,6 +44,9 @@ public class SimulationException extends Exception {
      * @param m  a String containing specialized error message
      **/
     public SimulationException(ProgramStatement ps, String m) {
+        super(new ErrorMessage(ps, "Runtime exception at " +
+                Binary.intToHexString(RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH) +
+                ": " + m).toString());
         message = new ErrorMessage(ps, "Runtime exception at " +
                 Binary.intToHexString(RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH) +
                 ": " + m);
@@ -85,9 +88,5 @@ public class SimulationException extends Exception {
 
     public int value() {
         return value;
-    }
-
-    public String toString(){
-        return this.error().toString();
     }
 }

@@ -37,6 +37,7 @@ public class AssemblyException extends Exception {
     private ErrorList errs;
 
     public AssemblyException(ErrorList errs) {
+        super(errs.toString());
         this.errs = errs;
     }
 
