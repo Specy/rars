@@ -197,5 +197,9 @@ public class ErrorList {
         }
         return report.toString();
     }
+
+    public String toString() {
+        return generateErrorAndWarningReport();
+    }
 }  // ErrorList
 

@@ -242,4 +242,8 @@ public class ErrorMessage {
         return sourceProgram.getLocalMacroPool().getExpansionHistory();
     }
 
+    public String toString() {
+        return generateReport();
+    }
+
 }  // ErrorMessage

@@ -19,4 +19,8 @@ public class ExitingException extends SimulationException {
     public ExitingException(ProgramStatement ps, AddressErrorException aee) {
         super(ps, aee);
     }
+
+    public String toString(){
+        return "Exit exception";
+    }
 }

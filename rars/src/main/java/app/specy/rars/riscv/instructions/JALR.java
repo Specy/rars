@@ -5,6 +5,7 @@ import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
 import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.hardware.Stack;
 
 /*
 Copyright (c) 2017,  Benjamin Landers
@@ -44,6 +45,11 @@ public class JALR extends BasicInstruction {
         int target = RegisterFile.getValue(operands[1]);
         InstructionSet.processReturnAddress(operands[0]);
         // Set PC = $t2 + immediate with the last bit set to 0
+        if(operands[0] == 0 && operands[1] == 1){
+            // means we are calling jalr x0, ra which is usually used for
+            // returning from a function
+            Stack.popCallStack();
+        }
         InstructionSet.processJump((target + ((operands[2]<<20)>>20)) & 0xFFFFFFFE);
     }
 }

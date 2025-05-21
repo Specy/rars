@@ -50,4 +50,8 @@ public class AssemblyException extends Exception {
     public ErrorList errors() {
         return errs;
     }
+
+    public String toString(){
+        return errs.toString();
+    }
 }

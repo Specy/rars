@@ -6,6 +6,8 @@ import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
 import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.hardware.Stack;
+import app.specy.rars.riscv.hardware.StackFrame;
 
 /*
 Copyright (c) 2017,  Benjamin Landers
@@ -43,6 +45,8 @@ public class JAL extends BasicInstruction {
     public void simulate(ProgramStatement statement) {
         int[] operands = statement.getOperands();
         InstructionSet.processReturnAddress(operands[0]);
-        InstructionSet.processJump(RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH + operands[1]);
+        int address = RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH + operands[1];
+        Stack.pushCallStack(StackFrame.fromGlobalState(address));
+        InstructionSet.processJump(address);
     }
 }

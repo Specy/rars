@@ -1,6 +1,6 @@
 {
   "name": "@specy/risc-v",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "keywords": [
     "risc-v",
     "rars",
@@ -13,7 +13,8 @@
   ],
   "description": "The RARS risc-v interpreter in JS",
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts"
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build:all": "cd ../../ && mvn clean install && cd rarsjs/ts && npm run build"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

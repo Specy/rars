@@ -86,4 +86,8 @@ public class SimulationException extends Exception {
     public int value() {
         return value;
     }
+
+    public String toString(){
+        return this.error().toString();
+    }
 }
