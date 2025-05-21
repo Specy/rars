@@ -46,7 +46,10 @@ public class JAL extends BasicInstruction {
         int[] operands = statement.getOperands();
         InstructionSet.processReturnAddress(operands[0]);
         int address = RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH + operands[1];
-        Stack.pushCallStack(StackFrame.fromGlobalState(address));
+        if(operands[0] == 1){
+            // if we are doing jal to ra, we need to push the current stack frame
+            Stack.pushCallStack(StackFrame.fromGlobalState(address));
+        }
         InstructionSet.processJump(address);
     }
 }
