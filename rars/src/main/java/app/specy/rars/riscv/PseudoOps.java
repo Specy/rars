@@ -271,7 +271,7 @@ public class PseudoOps {
             "addi t1,t2,%lo(label) ;addi RG1,RG2,LL5 ;#Load Lower Address : Set t1 to t2 + lower 12-bit label's address",
             "lb t1,%lo(label)(t2)  ;lb RG1,LL4(RG7)  ;#Load from Address",
             "lh t1,%lo(label)(t2)  ;lh RG1,LL4(RG7)  ;#Load from Address",
-            "lw t1,%lo(label)(t2)  ;lw RG1,LL4(RG7)  ;#Load from Address",
+            "lw t1,%lo(label)(t2)  ;lw RG1,LL4(RnG7)  ;#Load from Address",
             "flw f1,%lo(label)(t2) ;flw RG1,LL4(RG7) ;#Load from Address",
             "fld f1,%lo(label)(t2) ;fld RG1,LL4(RG7) ;#Load from Address",
             "",

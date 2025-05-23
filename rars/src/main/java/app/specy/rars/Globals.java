@@ -183,9 +183,14 @@ public class Globals {
         }
     }
 
+    public static boolean is64Bit() {
+        return Globals.getSettings().getBooleanSetting(Settings.Bool.RV64_ENABLED);
+    }
+
     public static void setIs64Bit(boolean value) {
         Globals.getSettings().setBooleanSetting(Settings.Bool.RV64_ENABLED, value);
         if(!initialized) return;
+        InstructionSet.rv64 = value;
         instructionSet = new InstructionSet();
         instructionSet.populate();
     }
