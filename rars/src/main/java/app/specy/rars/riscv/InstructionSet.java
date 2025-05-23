@@ -131,12 +131,9 @@ public class InstructionSet {
         StringTokenizer tokenizer;
 
         List<String> pseudoOps = new ArrayList<>(List.of(PseudoOps.PSEUDO_OPS));
-        System.out.println(rv64);
-        System.out.println("Size" + pseudoOps.size());
         if (rv64) {
             pseudoOps.addAll(List.of(PseudoOps.PSEUDO_OPS_64));
         }
-        System.out.println("Size" + pseudoOps.size());
 
         for (String line : pseudoOps) {
             // skip over: comment lines, empty lines, lines starting with blank.

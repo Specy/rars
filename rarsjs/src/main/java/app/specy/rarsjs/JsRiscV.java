@@ -9,6 +9,7 @@ import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 import org.teavm.jso.core.JSFunction;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -125,12 +126,29 @@ public class JsRiscV {
         return (int) RegisterFile.getRegister(register).getValue();
     }
 
-    /*
     @JSExport
-    public long getRegisterValueLong(String register) {
-        return RegisterFile.getRegister(register).getValue();
+    public BigInteger getRegisterValueLong(String register) {
+        return BigInteger.valueOf(RegisterFile.getRegister(register).getValue());
     }
-    */
+
+    @JSProperty
+    @JSExport
+    public BigInteger getStackPointerLong() {
+        return BigInteger.valueOf(RegisterFile.getStackPointerRegister().getValue());
+    }
+
+    @JSExport
+    public BigInteger[] getRegistersValuesLong() {
+        Register[] registers = RegisterFile.getRegisters();
+        BigInteger[] values = new BigInteger[registers.length];
+        for (int i = 0; i < registers.length; i++) {
+            values[i] = BigInteger.valueOf(registers[i].getValue());
+        }
+        return values;
+    }
+
+
+
 
     @JSExport
     public void registerHandler(String name, JSFunction handler) {
@@ -143,13 +161,7 @@ public class JsRiscV {
         return (int) RegisterFile.getStackPointerRegister().getValue();
     }
 
-    /*
-    @JSProperty
-    @JSExport
-    public long getStackPointerLong() {
-        return RegisterFile.getStackPointerRegister().getValue();
-    }
-    */
+
 
     @JSExport()
     public static void is64Bit() {
@@ -167,12 +179,7 @@ public class JsRiscV {
         return RegisterFile.getProgramCounter();
     }
 
-    /*
-    @JSExport
-    public long[] getRegistersValuesLong() {
-        return Arrays.stream(RegisterFile.getRegisters()).mapToLong(Register::getValue).toArray();
-    }
-    */
+
     @JSExport
     public int[] getRegistersValues() {
         return Arrays.stream(RegisterFile.getRegisters()).mapToInt((v) -> (int) v.getValue()).toArray();
