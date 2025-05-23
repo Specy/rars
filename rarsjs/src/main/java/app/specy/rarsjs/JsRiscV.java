@@ -133,16 +133,22 @@ public class JsRiscV {
 
     @JSProperty
     @JSExport
-    public BigInteger getStackPointerLong() {
-        return BigInteger.valueOf(RegisterFile.getStackPointerRegister().getValue());
+    public String getStackPointerLong() {
+        return BigInteger.valueOf(RegisterFile.getStackPointerRegister().getValue()).toString();
+    }
+
+    @JSProperty
+    @JSExport
+    public String getProgramCounterLong() {
+        return BigInteger.valueOf(RegisterFile.getProgramCounterRegister().getValue()).toString();
     }
 
     @JSExport
-    public BigInteger[] getRegistersValuesLong() {
+    public String[] getRegistersValuesLong() {
         Register[] registers = RegisterFile.getRegisters();
-        BigInteger[] values = new BigInteger[registers.length];
+        String[] values = new String[registers.length];
         for (int i = 0; i < registers.length; i++) {
-            values[i] = BigInteger.valueOf(registers[i].getValue());
+            values[i] = BigInteger.valueOf(registers[i].getValue()).toString();
         }
         return values;
     }
