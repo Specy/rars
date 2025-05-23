@@ -584,6 +584,3 @@ function makeRiscVfromSource(source: string): JsRiscV {
 function initializeRISCV(): void {
     _initializeRISCV()
 }
-
-
-console.log(RISCV.getInstructionSet()[0].getIsRv64Only)
