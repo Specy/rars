@@ -472,7 +472,7 @@ export interface JsRiscV {
      * @param register The name of the register.
      * @returns The value of the register in long format.
      */
-    getRegisterValueLong(register: RegisterName): bigint;
+    getRegisterValueLong(register: RegisterName): string;
 
     /**
      * Registers a handler function for a specific event or condition.
@@ -492,12 +492,18 @@ export interface JsRiscV {
      * Gets the current value of the stack pointer in long format.
      * @returns The value of the stack pointer in long format.
      */
-    stackPointerLong: bigint;
+    stackPointerLong: string;
     /**
      * Gets the current value of the program counter.
      * @returns The value of the program counter.
      */
     programCounter: number;
+
+    /**
+     * Gets the current value of the program counter in long format.
+     * @returns The value of the program counter in long format.
+     */
+    programCounterLong: string;
 
     /**
      * Gets the values of all registers.
@@ -510,7 +516,7 @@ export interface JsRiscV {
      * Gets the values of all registers in long format.
      * @returns An array containing the register values in long format. The order of the values is implementation defined.
      */
-    getRegistersValuesLong(): bigint[];
+    getRegistersValuesLong(): string[];
 
     /**
      * Gets the undo stack.
