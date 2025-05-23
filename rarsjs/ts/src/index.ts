@@ -161,10 +161,12 @@ export class RISCV {
         return _getInstructionSet() as JsInstruction[]
     }
     public static setIs64Bit(is64Bit: boolean) {
+        RISCV.initializeRISCV()
         _setIs64Bit(is64Bit)
     }
 
     public static is64Bit() {
+        RISCV.initializeRISCV()
         return _is64Bit()
     }
 }

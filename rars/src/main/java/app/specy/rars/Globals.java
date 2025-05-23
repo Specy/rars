@@ -184,13 +184,15 @@ public class Globals {
     }
 
     public static boolean is64Bit() {
+        if(!initialized) throw new RuntimeException("Cannot set 64 bit mode before initialization");
         return Globals.getSettings().getBooleanSetting(Settings.Bool.RV64_ENABLED);
     }
 
     public static void setIs64Bit(boolean value) {
+        if(!initialized) throw new RuntimeException("Cannot set 64 bit mode before initialization");
         Globals.getSettings().setBooleanSetting(Settings.Bool.RV64_ENABLED, value);
-        if(!initialized) return;
         InstructionSet.rv64 = value;
+        System.out.println(InstructionSet.rv64);
         instructionSet = new InstructionSet();
         instructionSet.populate();
     }

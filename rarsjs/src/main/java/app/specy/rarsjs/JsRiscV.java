@@ -152,12 +152,12 @@ public class JsRiscV {
     */
 
     @JSExport()
-    public void is64Bit(boolean is64Bit) {
+    public static void is64Bit() {
         RARS.is64Bit();
     }
 
     @JSExport()
-    public void setIs64Bit(boolean is64Bit) {
+    public static void setIs64Bit(boolean is64Bit) {
         RARS.setIs64Bit(is64Bit);
     }
 

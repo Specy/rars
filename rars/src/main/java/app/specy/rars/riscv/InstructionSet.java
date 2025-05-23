@@ -52,6 +52,7 @@ public class InstructionSet {
 
     private ArrayList<Instruction> instructionList;
     private ArrayList<MatchMap> opcodeMatchMaps;
+
     public void setSyscallLoaderIO(RISCVIO io) {
         SyscallLoader.setIO(io);
     }
@@ -62,7 +63,6 @@ public class InstructionSet {
      */
     public InstructionSet() {
         instructionList = new ArrayList<>();
-
     }
 
     /**
@@ -90,7 +90,7 @@ public class InstructionSet {
         addPseudoInstructions();
         // Initialization step.  Create token list for each instruction example.  This is
         // used by parser to determine user program correct syntax.
-            for (Instruction inst : instructionList) {
+        for (Instruction inst : instructionList) {
             inst.createExampleTokenList();
         }
 
@@ -131,9 +131,12 @@ public class InstructionSet {
         StringTokenizer tokenizer;
 
         List<String> pseudoOps = new ArrayList<>(List.of(PseudoOps.PSEUDO_OPS));
-        if(rv64){
+        System.out.println(rv64);
+        System.out.println("Size" + pseudoOps.size());
+        if (rv64) {
             pseudoOps.addAll(List.of(PseudoOps.PSEUDO_OPS_64));
         }
+        System.out.println("Size" + pseudoOps.size());
 
         for (String line : pseudoOps) {
             // skip over: comment lines, empty lines, lines starting with blank.
@@ -413,7 +416,6 @@ public class InstructionSet {
         instructionList.add(new SLLI());
 
 
-
         instructionList.add(new SLT());
         instructionList.add(new SLTI());
         instructionList.add(new SLTIU());
@@ -430,7 +432,7 @@ public class InstructionSet {
         instructionList.add(new XOR());
         instructionList.add(new XORI());
 
-        if(InstructionSet.rv64){
+        if (InstructionSet.rv64) {
             instructionList.add(new ADDW());
             instructionList.add(new ADDIW());
             instructionList.add(new DIVUW());
