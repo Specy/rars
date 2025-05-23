@@ -131,6 +131,7 @@ export type JsInstruction = {
     example: string;
     description: string;
     tokens: JsInstructionToken[];
+    getIsRv64Only: () => boolean;
 }
 
 export type RiscvTokenizedLine = {
@@ -583,3 +584,6 @@ function makeRiscVfromSource(source: string): JsRiscV {
 function initializeRISCV(): void {
     _initializeRISCV()
 }
+
+
+console.log(RISCV.getInstructionSet()[0].getIsRv64Only)

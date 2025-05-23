@@ -131,9 +131,7 @@ public class InstructionSet {
         StringTokenizer tokenizer;
 
         List<String> pseudoOps = new ArrayList<>(List.of(PseudoOps.PSEUDO_OPS));
-        if (rv64) {
-            pseudoOps.addAll(List.of(PseudoOps.PSEUDO_OPS_64));
-        }
+
 
         for (String line : pseudoOps) {
             // skip over: comment lines, empty lines, lines starting with blank.
@@ -155,8 +153,34 @@ public class InstructionSet {
                         template = template + "\n";
                     }
                 }
-                instructionList.add(new ExtendedInstruction(pseudoOp, template, description));
+                instructionList.add(new ExtendedInstruction(pseudoOp, template, description, false));
                 //if (firstTemplate != null) System.out.println("\npseudoOp: "+pseudoOp+"\ndefault template:\n"+firstTemplate+"\ncompact template:\n"+template);
+            }
+        }
+        if (rv64) {
+            for (String line : PseudoOps.PSEUDO_OPS_64) {
+                // skip over: comment lines, empty lines, lines starting with blank.
+                if (!line.startsWith("#") && !line.startsWith(" ")
+                        && line.length() > 0) {
+                    description = "";
+                    tokenizer = new StringTokenizer(line, ";");
+                    pseudoOp = tokenizer.nextToken();
+                    template = "";
+                    while (tokenizer.hasMoreTokens()) {
+                        token = tokenizer.nextToken();
+                        if (token.startsWith("#")) {
+                            // Optional description must be last token in the line.
+                            description = token.substring(1);
+                            break;
+                        }
+                        template = template + token;
+                        if (tokenizer.hasMoreTokens()) {
+                            template = template + "\n";
+                        }
+                    }
+                    instructionList.add(new ExtendedInstruction(pseudoOp, template, description, true));
+                    //if (firstTemplate != null) System.out.println("\npseudoOp: "+pseudoOp+"\ndefault template:\n"+firstTemplate+"\ncompact template:\n"+template);
+                }
             }
         }
 

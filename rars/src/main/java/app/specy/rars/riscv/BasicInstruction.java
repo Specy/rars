@@ -87,6 +87,7 @@ public abstract class BasicInstruction extends Instruction {
     public BasicInstruction(String example, String description, BasicInstructionFormat instrFormat,
                             String operMask, boolean onlyinrv64) {
         this(example, description, instrFormat, operMask);
+        this.isRv64 = onlyinrv64;
         if (!InstructionSet.rv64 && onlyinrv64) {
             throw new NullPointerException("rv64" + " instruction " + example + " not supported in rv32");
         }

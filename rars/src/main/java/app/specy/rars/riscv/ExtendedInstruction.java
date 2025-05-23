@@ -58,25 +58,13 @@ public class ExtendedInstruction extends Instruction {
      * @param description a helpful description to be included on help requests
      **/
 
-    public ExtendedInstruction(String example, String translation, String description) {
+    public ExtendedInstruction(String example, String translation, String description, boolean isRv64Only) {
         this.exampleFormat = example;
         this.description = description;
         this.mnemonic = this.extractOperator(example);
         this.createExampleTokenList();
         this.translationStrings = buildTranslationList(translation);
-    }
-
-    /**
-     * Constructor for ExtendedInstruction, where no instruction description or
-     * compact translation is provided.
-     *
-     * @param example     A String containing example use of the MIPS extended instruction.
-     * @param translation Specifications for translating this instruction into a sequence
-     *                    of one or more MIPS basic instructions.
-     **/
-
-    public ExtendedInstruction(String example, String translation) {
-        this(example, translation, "");
+        this.isRv64 = isRv64Only;
     }
 
     /**
