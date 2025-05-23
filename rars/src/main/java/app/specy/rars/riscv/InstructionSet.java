@@ -1,14 +1,13 @@
 package app.specy.rars.riscv;
 
-import app.specy.rars.Globals;
 import app.specy.rars.ProgramStatement;
-import app.specy.rars.Settings;
 import app.specy.rars.SimulationException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.instructions.*;
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.syscalls.*;
 import app.specy.rars.util.SystemIO;
+
 import java.util.*;
 
 	/*
@@ -49,7 +48,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class InstructionSet {
-    public static boolean rv64 = Globals.getSettings().getBooleanSetting(Settings.Bool.RV64_ENABLED);
+    public static boolean rv64 = false;
 
     private ArrayList<Instruction> instructionList;
     private ArrayList<MatchMap> opcodeMatchMaps;

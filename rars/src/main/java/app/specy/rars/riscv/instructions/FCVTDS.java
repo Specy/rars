@@ -1,10 +1,10 @@
 package app.specy.rars.riscv.instructions;
 
+import app.specy.rars.ProgramStatement;
+import app.specy.rars.SimulationException;
 import app.specy.rars.jsoftfloat.Environment;
 import app.specy.rars.jsoftfloat.types.Float32;
 import app.specy.rars.jsoftfloat.types.Float64;
-import app.specy.rars.ProgramStatement;
-import app.specy.rars.SimulationException;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;

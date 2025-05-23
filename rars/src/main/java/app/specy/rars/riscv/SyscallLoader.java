@@ -5,8 +5,6 @@ import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.syscalls.*;
 
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

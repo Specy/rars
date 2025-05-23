@@ -1,11 +1,11 @@
 package app.specy.rars.riscv.instructions;
 
 import app.specy.rars.ProgramStatement;
-import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
 import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.hardware.Stack;
 import app.specy.rars.riscv.hardware.StackFrame;
 

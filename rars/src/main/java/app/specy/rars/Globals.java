@@ -3,12 +3,12 @@ package app.specy.rars;
 import app.specy.rars.assembler.SymbolTable;
 import app.specy.rars.config.ConfigProperties;
 import app.specy.rars.config.SyscallProperties;
-import app.specy.rars.riscv.SyscallLoader;
-import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.InstructionSet;
 import app.specy.rars.riscv.SyscallNumberOverride;
+import app.specy.rars.riscv.hardware.Memory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Set;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar

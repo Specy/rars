@@ -2,10 +2,10 @@ package app.specy.rars.simulator;
 
 import app.specy.rars.Globals;
 import app.specy.rars.ProgramStatement;
+import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
-import app.specy.rars.riscv.Instruction;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar

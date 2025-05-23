@@ -1,9 +1,9 @@
 package app.specy.rars.riscv.instructions;
 
 import app.specy.rars.ProgramStatement;
-import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

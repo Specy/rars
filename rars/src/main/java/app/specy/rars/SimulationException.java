@@ -1,8 +1,8 @@
 package app.specy.rars;
 
+import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
-import app.specy.rars.riscv.Instruction;
 import app.specy.rars.util.Binary;
 
 /**

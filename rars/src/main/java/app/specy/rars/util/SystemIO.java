@@ -1,7 +1,5 @@
 package app.specy.rars.util;
 
-import app.specy.rars.Globals;
-import app.specy.rars.Settings;
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.io.RISCVIOError;
 

@@ -1,5 +1,5 @@
 //@ts-ignore
-import {makeRiscVfromSource as _makeRiscVfromSource, initializeRISCV as _initializeRISCV, getInstructionSet as _getInstructionSet, setIs64Bit as _setIs64Bit} from './generated/rars'
+import {makeRiscVfromSource as _makeRiscVfromSource, initializeRISCV as _initializeRISCV, getInstructionSet as _getInstructionSet, setIs64Bit as _setIs64Bit, is64Bit as _is64Bit} from './generated/rars'
 
 
 export type JsInstructionToken = {
@@ -162,6 +162,10 @@ export class RISCV {
     }
     public static setIs64Bit(is64Bit: boolean) {
         _setIs64Bit(is64Bit)
+    }
+
+    public static is64Bit() {
+        return _is64Bit()
     }
 }
 

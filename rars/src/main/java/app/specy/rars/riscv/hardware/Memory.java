@@ -5,7 +5,6 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.Settings;
 import app.specy.rars.SimulationException;
 import app.specy.rars.riscv.Instruction;
-import app.specy.rars.util.Binary;
 
 import java.util.Collection;
 import java.util.Observable;

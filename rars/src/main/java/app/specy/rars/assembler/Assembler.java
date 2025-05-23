@@ -1,11 +1,11 @@
 package app.specy.rars.assembler;
 
 import app.specy.rars.*;
-import app.specy.rars.riscv.hardware.AddressErrorException;
-import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.ExtendedInstruction;
 import app.specy.rars.riscv.Instruction;
+import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
 

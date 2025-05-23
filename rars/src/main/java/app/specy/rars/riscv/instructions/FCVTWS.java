@@ -1,17 +1,13 @@
 package app.specy.rars.riscv.instructions;
 
-import app.specy.rars.jsoftfloat.Environment;
-import app.specy.rars.jsoftfloat.types.Float32;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.SimulationException;
-import app.specy.rars.assembler.DataTypes;
-import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
-import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
-import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.jsoftfloat.Environment;
+import app.specy.rars.jsoftfloat.types.Float32;
 import app.specy.rars.riscv.BasicInstruction;
 import app.specy.rars.riscv.BasicInstructionFormat;
-
-import java.math.BigInteger;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
 /*
 Copyright (c) 2017,  Benjamin Landers

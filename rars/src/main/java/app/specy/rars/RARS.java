@@ -1,16 +1,16 @@
 package app.specy.rars;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import app.specy.rars.assembler.TokenList;
-import app.specy.rars.riscv.fs.RISCVFileSystem;
-import app.specy.rars.riscv.fs.MemoryFileSystem;
-import app.specy.rars.riscv.hardware.*;
 import app.specy.rars.riscv.InstructionSet;
+import app.specy.rars.riscv.fs.MemoryFileSystem;
+import app.specy.rars.riscv.fs.RISCVFileSystem;
+import app.specy.rars.riscv.hardware.*;
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RARS {
 
@@ -127,6 +127,9 @@ public class RARS {
         Globals.setIs64Bit(is64Bit);
     }
 
+    public static boolean is64Bit(){
+        return Globals.is64Bit();
+    }
 
     public Simulator.Reason step() throws SimulationException {
         stopReason = this.main.simulate(1);

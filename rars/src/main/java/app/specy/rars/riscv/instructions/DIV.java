@@ -1,7 +1,5 @@
 package app.specy.rars.riscv.instructions;
 
-import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
-
 /*
 Copyright (c) 2017,  Benjamin Landers
 

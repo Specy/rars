@@ -4,13 +4,13 @@ import app.specy.rars.assembler.SymbolTable;
 import app.specy.rars.assembler.Token;
 import app.specy.rars.assembler.TokenList;
 import app.specy.rars.assembler.TokenTypes;
+import app.specy.rars.riscv.BasicInstruction;
+import app.specy.rars.riscv.BasicInstructionFormat;
+import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
-import app.specy.rars.riscv.BasicInstruction;
-import app.specy.rars.riscv.BasicInstructionFormat;
-import app.specy.rars.riscv.Instruction;
 import app.specy.rars.util.Binary;
 
 import java.util.ArrayList;
