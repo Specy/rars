@@ -286,8 +286,8 @@ public class JsRiscV {
     }
 
     @JSExport
-    public void setRegisterValue(String register, BigInteger value) {
-        RegisterFile.getRegister(register).setValue(value.longValue());
+    public void setRegisterValue(String register, int high, int low) {
+        RegisterFile.getRegister(register).setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
     }
 
     @JSProperty

@@ -14,7 +14,7 @@
 
     <properties>
         <java.version>11</java.version>
-        <teavm.version>0.11.0</teavm.version>
+        <teavm.version>0.13.1</teavm.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -27,7 +27,7 @@
         <dependency>
             <groupId>org.teavm</groupId>
             <artifactId>teavm-jso</artifactId>
-            <version>0.11.0</version>
+            <version>${teavm.version}</version>
         </dependency>
         <!-- Emulator of Java class library for TeaVM -->
         <dependency>

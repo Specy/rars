@@ -557,7 +557,7 @@ export interface JsRiscV {
      * @param register The name of the register.
      * @param value The value to set the register to.
      */
-    setRegisterValue(register: RegisterName, value: bigint): void;
+    setRegisterValue(register: RegisterName, high: number, low: number): void;
 
     /**
      * Checks if the simulation has terminated.
@@ -583,4 +583,10 @@ function makeRiscVfromSource(source: string): JsRiscV {
  */
 function initializeRISCV(): void {
     _initializeRISCV()
+}
+
+export function bigintToHighLow(value: bigint): [high: number, low: number] {
+    const high = Number((value >> 32n) & 0xFFFFFFFFn)
+    const low = Number(value & 0xFFFFFFFFn)
+    return [high, low]
 }
