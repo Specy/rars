@@ -557,7 +557,7 @@ export interface JsRiscV {
      * @param register The name of the register.
      * @param value The value to set the register to.
      */
-    setRegisterValue(register: RegisterName, value: number): void;
+    setRegisterValue(register: RegisterName, value: bigint): void;
 
     /**
      * Checks if the simulation has terminated.
