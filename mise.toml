@@ -1,0 +1,13 @@
+# Toolchain for the RARS build: Java sources -> Maven -> TeaVM -> rarsjs/ts/src/generated/rars.js
+#
+# Node comes from the global baseline (~/.config/mise/config.toml); only the
+# JVM-side tools are pinned here, since they exist for this repo alone.
+
+[tools]
+# Temurin 21 (LTS). The parent pom targets 17 and the modules override down to
+# 15/16, all of which javac 21 still accepts.
+java = "temurin-21"
+
+# Maven is a build tool rather than a runtime, but pinning the minor keeps the
+# build reproducible instead of drifting on the next `mise install`.
+maven = "3.9"

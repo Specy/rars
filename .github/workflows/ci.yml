@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      # Java and Maven come from mise.toml, so CI builds with the same
+      # toolchain as a local checkout and the two cannot drift apart.
+      - name: Install Java and Maven
+        uses: jdx/mise-action@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: rarsjs/ts/package-lock.json
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      # Compiles the simulator and runs TeaVM, which regenerates the
+      # rarsjs/ts/src/generated bundle that the TypeScript wrapper imports.
+      - name: Compile Java and generate JavaScript
+        run: mvn --batch-mode clean install
+
+      - name: Install TypeScript dependencies
+        working-directory: rarsjs/ts
+        run: npm ci
+
+      - name: Build TypeScript library
+        working-directory: rarsjs/ts
+        run: npm run build
+
+      # Assembles and runs a small program through the built dist/, so a break
+      # anywhere in the Java -> TeaVM -> TypeScript chain fails the build.
+      - name: Run smoke test
+        working-directory: rarsjs/ts
+        run: npm test

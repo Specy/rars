@@ -14,7 +14,7 @@
 
     <properties>
         <java.version>11</java.version>
-        <teavm.version>0.13.1</teavm.version>
+        <teavm.version>0.15.0</teavm.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -82,13 +82,13 @@
             <plugin>
                 <groupId>org.teavm</groupId>
                 <artifactId>teavm-maven-plugin</artifactId>
-                <version>0.11.0</version>
+                <version>${teavm.version}</version>
                 <dependencies>
                     <!-- This dependency is required by TeaVM to emulate subset of Java class library -->
                     <dependency>
                         <groupId>org.teavm</groupId>
                         <artifactId>teavm-classlib</artifactId>
-                        <version>0.11.0</version>
+                        <version>${teavm.version}</version>
                     </dependency>
                 </dependencies>
                 <executions>

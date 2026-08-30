@@ -5,11 +5,17 @@ import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.Simulator;
+import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSExport;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.JSProperty;
 import org.teavm.jso.core.JSFunction;
+import org.teavm.jso.core.JSNumber;
+import org.teavm.jso.core.JSPromise;
+import org.teavm.jso.function.JSConsumer;
 
 import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -66,24 +72,88 @@ public class JsRiscV {
         this.main.initialize(startAtMain);
     }
 
-    @JSExport
-    public Simulator.Reason step() throws SimulationException {
-        return this.main.step();
+
+    /*
+     * Simulation runs inside a single long-lived TeaVM coroutine ("green thread"), so that a
+     * JS IO handler returning a promise can suspend the Java stack and resume once it settles.
+     *
+     * The coroutine is started once and then parked on a JS promise between tasks. Waking it
+     * costs a microtask, whereas starting a fresh coroutine per call (Thread.start, which is what
+     * JSPromise.callAsync does) goes through setTimeout and costs a full macrotask - about 1ms
+     * per step, which is far too slow for instruction-level stepping.
+     */
+    private static final ArrayDeque<Runnable> tasks = new ArrayDeque<>();
+    private static JSConsumer<JSObject> unpark;
+    private static boolean workerStarted;
+
+    private interface Body {
+        int run() throws SimulationException;
+    }
+
+    private static void workerLoop() {
+        while (true) {
+            while (!tasks.isEmpty()) {
+                Runnable task = tasks.poll();
+                try {
+                    task.run();
+                } catch (Throwable ignored) {
+                    // run() already settles the promise for every outcome, so there is nowhere
+                    // left to report this; swallow it rather than killing the worker.
+                }
+            }
+            JSPromise<JSObject> parked = JSPromise.create((resolve, reject) -> unpark = resolve);
+            parked.await();
+            unpark = null;
+        }
+    }
+
+    private static void submit(Runnable task) {
+        tasks.add(task);
+        if (!workerStarted) {
+            workerStarted = true;
+            JSPromise.runAsync(JsRiscV::workerLoop);
+            return;
+        }
+        JSConsumer<JSObject> resume = unpark;
+        if (resume != null) {
+            unpark = null;
+            resume.accept(null);
+        }
+    }
+
+    private static JSPromise<JSNumber> run(Body body) {
+        return JSPromise.create((resolve, reject) -> submit(() -> {
+            int result;
+            try {
+                result = body.run();
+            } catch (Throwable t) {
+                reject.accept(JSExceptions.getJSException(t));
+                return;
+            }
+            resolve.accept(JSNumber.valueOf(result));
+        }));
     }
 
     @JSExport
-    public Simulator.Reason getStopReason() {
-        return this.main.getStopReason();
+    public JSPromise<JSNumber> step() {
+        return run(() -> this.main.step().ordinal());
     }
 
     @JSExport
-    public Simulator.Reason simulate() throws SimulationException {
-        return this.main.simulate(-1);
+    public int getStopReason() {
+        // Null until a simulation has run; StopReason.NONE on the TS side.
+        Simulator.Reason reason = this.main.getStopReason();
+        return reason == null ? -1 : reason.ordinal();
     }
 
     @JSExport
-    public Simulator.Reason simulateWithLimit(int limit) throws SimulationException {
-        return this.main.simulate(limit);
+    public JSPromise<JSNumber> simulate() {
+        return run(() -> this.main.simulate(-1).ordinal());
+    }
+
+    @JSExport
+    public JSPromise<JSNumber> simulateWithLimit(int limit) {
+        return run(() -> this.main.simulate(limit).ordinal());
     }
 
     @JSExport
@@ -112,13 +182,13 @@ public class JsRiscV {
     */
 
     @JSExport
-    public Simulator.Reason simulateWithBreakpoints(int[] breakpoints) throws SimulationException {
-        return this.main.simulate(breakpoints);
+    public JSPromise<JSNumber> simulateWithBreakpoints(int[] breakpoints) {
+        return run(() -> this.main.simulate(breakpoints).ordinal());
     }
 
     @JSExport
-    public Simulator.Reason simulateWithBreakpointsAndLimit(int[] breakpoints, int limit) throws SimulationException {
-        return this.main.simulate(limit, breakpoints);
+    public JSPromise<JSNumber> simulateWithBreakpointsAndLimit(int[] breakpoints, int limit) {
+        return run(() -> this.main.simulate(limit, breakpoints).ordinal());
     }
 
     @JSExport
@@ -170,8 +240,8 @@ public class JsRiscV {
 
 
     @JSExport()
-    public static void is64Bit() {
-        RARS.is64Bit();
+    public static boolean is64Bit() {
+        return RARS.is64Bit();
     }
 
     @JSExport()

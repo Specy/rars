@@ -11,6 +11,7 @@ export type JsInstructionToken = {
 }
 
 export enum StopReason {
+    NONE = -1,         // no simulation has run yet
     BREAKPOINT,
     EXCEPTION,
     MAX_STEPS,         // includes step mode (where maxSteps is 1)
@@ -101,7 +102,7 @@ export type HandlerMap = {
     openFile: {in: [filename: string, flags: number, append: boolean], out: number}
     closeFile: {in: [fileDescriptor: number], out: void}
     writeFile: {in: [fileDescriptor: number, buffer: number[]], out: void}
-    readFile: {in: [fileDescriptor: number, destination: number[], length: number], out: number}
+    readFile: {in: [fileDescriptor: number, destination: number[], length: number], out: [readOrEof: number, buffer: number[]]}
     confirm: {in: [message: string], out: ConfirmResult}
     inputDialog: {in: [message: string], out: string}
     outputDialog: {in: [message: string, type: DialogType], out: void}
@@ -124,6 +125,7 @@ export type HandlerMap = {
     sleep: {in: [milliseconds: number], out: void}
     stdIn: {in: [buffer: number[], length: number], out: void}
     stdOut: {in: [buffer: number[]], out: void}
+    stdErr: {in: [buffer: number[]], out: void}
 }
 
 export type JsInstruction = {
@@ -166,7 +168,7 @@ export class RISCV {
         _setIs64Bit(is64Bit)
     }
 
-    public static is64Bit() {
+    public static is64Bit(): boolean {
         RISCV.initializeRISCV()
         return _is64Bit()
     }
@@ -318,13 +320,19 @@ export const RISCV_REGISTERS = keysOfEnum(RISCVRegisters) as RegisterName[]
 type HandlerName = keyof HandlerMap
 
 
+/**
+ * A handler may return its result directly, or a promise of it. When a handler returns a promise
+ * the simulation suspends until it settles, so IO can be backed by an async API (prompting the
+ * user, reading a file, awaiting a worker) without blocking the event loop. If the promise
+ * rejects, the pending `step`/`simulate*` call rejects too.
+ */
 export type HandlerMapFns = {
-    [K in HandlerName]: (...args: HandlerMap[K]['in']) => HandlerMap[K]['out']
+    [K in HandlerName]: (...args: HandlerMap[K]['in']) => HandlerMap[K]['out'] | Promise<HandlerMap[K]['out']>
 }
 
 export function registerHandlers(riscv: JsRiscV, handlers: HandlerMapFns) {
     for (const [name, handler] of Object.entries(handlers)) {
-        riscv.registerHandler(name as HandlerName, handler as (...args: HandlerMap[HandlerName]['in']) => HandlerMap[HandlerName]['out'])
+        riscv.registerHandler(name as HandlerName, handler as (...args: HandlerMap[HandlerName]['in']) => HandlerMap[HandlerName]['out'] | Promise<HandlerMap[HandlerName]['out']>)
     }
 }
 
@@ -358,9 +366,11 @@ export interface JsRiscV {
 
     /**
      * Executes a single instruction.
-     * @returns True if the execution is complete, false otherwise.
+     *
+     * The promise settles on a microtask unless an IO handler returned a promise, in which case
+     * it settles once that handler and the rest of the instruction have finished.
      */
-    step(): StopReason;
+    step(): Promise<StopReason>;
 
 
     /**
@@ -437,29 +447,29 @@ export interface JsRiscV {
     /**
      * Simulates until the stop condition is met. it might be a breakpoint, exception, etc...
      */
-    simulate(): StopReason;
+    simulate(): Promise<StopReason>;
 
     /**
      * Simulates the program for a limited number of instructions.
      * @param limit The maximum number of instructions to execute.
-     * @returns True if the execution is complete, false otherwise.
+     * @returns A promise resolving to the reason the simulation stopped.
      */
-    simulateWithLimit(limit: number): StopReason;
+    simulateWithLimit(limit: number): Promise<StopReason>;
 
     /**
      * Simulates the program until a breakpoint is reached.
      * @param breakpoints An array of memory addresses where the simulation should pause.
-     * @returns True if the execution is complete, false otherwise.
+     * @returns A promise resolving to the reason the simulation stopped.
      */
-    simulateWithBreakpoints(breakpoints: number[]): StopReason;
+    simulateWithBreakpoints(breakpoints: number[]): Promise<StopReason>;
 
     /**
      * Simulates the program with both breakpoints and a limit.
      * @param breakpoints An array of memory addresses where the simulation should pause.
      * @param limit The maximum number of instructions to execute.
-     * @returns True if the execution is complete, false otherwise.
+     * @returns A promise resolving to the reason the simulation stopped.
      */
-    simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): StopReason;
+    simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): Promise<StopReason>;
 
     /**
      * Gets the value of a register.
@@ -480,7 +490,7 @@ export interface JsRiscV {
      * @param name The name of the event or condition.
      * @param handler The handler function to be called when the event occurs. The function signature depends on the event name.
      */
-    registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out']): void;
+    registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void;
 
     /**
      * Gets the current value of the stack pointer.

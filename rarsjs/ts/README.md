@@ -30,9 +30,9 @@ riscvSimulator.assemble();
 riscvSimulator.initialize(true); // Start at 'main'
 
 while (!riscvSimulator.terminated) {
-  riscvSimulator.step();
+  await riscvSimulator.step();
 }
-// or riscvSimulator.simulate()
+// or await riscvSimulator.simulate()
 
 const pc = riscvSimulator.programCounter;
 const t2 = riscvSimulator.getRegisterValue('t2');
@@ -49,6 +49,12 @@ riscvSimulator.registerHandler("printInt", (value: number) => {
   console.log("printInt syscall called with:", value);
 });
 
+// Handlers may also be async: returning a promise suspends the simulation until it settles,
+// so IO can be backed by an async API without blocking the event loop.
+riscvSimulator.registerHandler("readInt", async () => {
+  return await promptUserForANumber();
+});
+
 // Accessing the undo stack:
 const undoStack = riscvSimulator.getUndoStack();
 undoStack.forEach(step => {
@@ -60,18 +66,41 @@ undoStack.forEach(step => {
 
 // Simulating with breakpoints:
 const breakpoints = [0x00400004, 0x00400008]; // Example breakpoint addresses
-riscvSimulator.simulateWithBreakpoints(breakpoints);
+await riscvSimulator.simulateWithBreakpoints(breakpoints);
 
 //Simulating with a limit
 const limit = 100
-riscvSimulator.simulateWithLimit(limit);
+await riscvSimulator.simulateWithLimit(limit);
 
 //Simulating with breakpoints and a limit
-riscvSimulator.simulateWithBreakpointsAndLimit(breakpoints, limit);
+await riscvSimulator.simulateWithBreakpointsAndLimit(breakpoints, limit);
 
 //Setting Register Values:
 riscvSimulator.setRegisterValue("t0", 42);
 ```
+
+## IO handlers
+
+Every syscall that needs to talk to the outside world goes through a handler you register. A
+handler can return its result directly, or return a promise of it:
+
+```typescript
+riscvSimulator.registerHandler("readInt", () => 42);                  // synchronous
+riscvSimulator.registerHandler("readString", () => fetchLine());      // asynchronous
+```
+
+When a handler returns a promise the simulation suspends at that instruction and resumes once the
+promise settles, so nothing has to be shoehorned into a synchronous API. Because of that,
+`step`, `simulate`, `simulateWithLimit`, `simulateWithBreakpoints` and
+`simulateWithBreakpointsAndLimit` all return a promise. Everything else on `JsRiscV` (registers,
+memory, statements, the undo stack) stays synchronous.
+
+If a handler's promise rejects, the pending `step`/`simulate*` call rejects as well, with the
+rejection reason in the message.
+
+Synchronous handlers never yield to the event loop: the simulation runs straight through, and the
+returned promise settles on a microtask. Overlapping calls are queued and run one after another,
+never concurrently.
 
 ## API
 
@@ -103,18 +132,18 @@ This interface provides methods to control and interact with a RISC-V simulator 
 
 * `assemble(): RISCVAssembleResult`: Assembles the program. Returns an object containing a report, error list, and an `hasErrors` flag.
 * `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction.
-* `step(): boolean`: Executes a single instruction. Returns `true` if the execution is complete (program terminated), `false` otherwise.
+* `step(): Promise<StopReason>`: Executes a single instruction. Resolves to the reason the simulation stopped.
 * `undo(): void`: Undoes the last instruction executed, if `canUndo` is true and undo is enabled.
 * `setUndoEnabled(enabled: boolean): void`: Enables or disables the undo feature.
 * `setUndoSize(size: number): void`: Sets the maximum number of steps kept in the undo history. Must be called before assembling.
-* `simulateWithLimit(limit: number): boolean`: Simulates the program for a maximum of `limit` instructions. Returns `true` if execution completes/terminates before the limit, `false` otherwise.
-* `simulateWithBreakpoints(breakpoints: number[]): boolean`: Simulates the program until a breakpoint is reached or the program terminates. `breakpoints` is an array of memory addresses. Returns `true` if execution completes/terminates, `false` if a breakpoint is hit.
-* `simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): boolean`: Simulates until a breakpoint, limit is reached, or termination. Returns `true` if execution completes/terminates, `false` otherwise.
+* `simulateWithLimit(limit: number): Promise<StopReason>`: Simulates the program for a maximum of `limit` instructions. Resolves to the reason the simulation stopped.
+* `simulateWithBreakpoints(breakpoints: number[]): Promise<StopReason>`: Simulates the program until a breakpoint is reached or the program terminates. `breakpoints` is an array of memory addresses. Resolves to the reason the simulation stopped.
+* `simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): Promise<StopReason>`: Simulates until a breakpoint, limit is reached, or termination. Resolves to the reason the simulation stopped.
 * `getRegisterValue(register: RegisterName): number`: Returns the value of the specified register.
 * `setRegisterValue(register: RegisterName, value: number): void`: Sets the value of the specified register.
 * `getRegistersValues(): number[]`: Returns an array of all general-purpose register values. The order might be implementation-defined but usually corresponds to register numbers 0-31.
 * `getConditionFlags(): number[]`: Gets the 8 condition flags (if applicable, typically related to floating-point or custom extensions).
-* `registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out']): void`: Registers a handler function for a specific event (e.g., syscalls). See `HandlerName` and `HandlerMap` for details.
+* `registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void`: Registers a handler function for a specific event (e.g., syscalls). See `HandlerName`, `HandlerMap` and [IO handlers](#io-handlers) for details.
 * `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
 * `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values.
 * `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`.

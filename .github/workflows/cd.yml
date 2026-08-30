@@ -1,0 +1,117 @@
+name: CD
+
+# This file publishes @specy/risc-v to npm via trusted publishing (OIDC), so its
+# PATH AND FILENAME ARE LOAD-BEARING: they are registered as the trusted
+# publisher on npmjs.com. Renaming or moving this workflow breaks publishing,
+# and the failure only shows up on the next release. Update the package's
+# trusted publisher settings on npmjs.com first if you must move it.
+
+on:
+  push:
+    tags:
+      # Release tags, e.g. v1.2.9. The tag must match the version in
+      # rarsjs/ts/package.json; the job below refuses to publish otherwise.
+      - v*
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Tag refs are unique and this job publishes, so never cancel a run.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @specy/risc-v to npm
+    # Only the repository owner can cut a release. A tag pushed by anyone else
+    # skips this job rather than failing it, so it never reaches the step that
+    # requests an OIDC token.
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Lets GitHub mint the short-lived OIDC token that npm trades for a
+      # publish credential. Without this, trusted publishing cannot work.
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          # Full history, so the guard below can prove the tag is on main.
+          fetch-depth: 0
+
+      # Tags are not branches: a tag can point at any commit, including one
+      # that was never reviewed or merged. Releasing only what the default
+      # branch contains keeps a side branch from being published.
+      - name: Verify tag is on the default branch
+        env:
+          # Read from the repository rather than hardcoded, so this works
+          # whether the default branch is main or master, and survives a rename.
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags --quiet origin "$DEFAULT_BRANCH"
+          # FETCH_HEAD is what the fetch above just wrote; the remote-tracking
+          # ref is not reliably populated in a tag checkout.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "Tag $GITHUB_REF_NAME points at a commit that is not on $DEFAULT_BRANCH; refusing to publish." >&2
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME is contained in $DEFAULT_BRANCH"
+
+      - name: Install Java and Maven
+        uses: jdx/mise-action@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          # npm >= 11.5.1 and Node >= 22.14.0 are required for trusted
+          # publishing; Node 24 ships a new enough npm.
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: rarsjs/ts/package-lock.json
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Verify tag matches package version
+        working-directory: rarsjs/ts
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          manifest="$(node -p "require('./package.json').version")"
+          if [[ "$tagged" != "$manifest" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $manifest" >&2
+            exit 1
+          fi
+          echo "Publishing @specy/risc-v $manifest"
+
+      # Rebuilds the simulator from source rather than trusting whatever is in
+      # the working tree, so the published dist/ always matches the tag.
+      - name: Compile Java and generate JavaScript
+        run: mvn --batch-mode clean install
+
+      - name: Install TypeScript dependencies
+        working-directory: rarsjs/ts
+        run: npm ci
+
+      - name: Build TypeScript library
+        working-directory: rarsjs/ts
+        run: npm run build
+
+      - name: Run smoke test
+        working-directory: rarsjs/ts
+        run: npm test
+
+      # No NODE_AUTH_TOKEN: npm detects the OIDC environment and exchanges it
+      # for a short-lived, run-scoped credential. Provenance attestations are
+      # generated automatically for public packages, so --provenance is not
+      # passed explicitly.
+      - name: Publish to npm
+        working-directory: rarsjs/ts
+        run: npm publish --access public

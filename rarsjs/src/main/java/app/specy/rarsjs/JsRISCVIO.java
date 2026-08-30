@@ -2,8 +2,10 @@ package app.specy.rarsjs;
 
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.io.RISCVIOError;
+import org.teavm.jso.JSBody;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSObject;
+import org.teavm.jso.JSProperty;
 import org.teavm.jso.core.*;
 
 import java.util.HashMap;
@@ -23,6 +25,10 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     private JSObject callHandler(String name, JSObject... args) {
+        return awaitIfThenable(name, invokeHandler(name, args));
+    }
+
+    private JSObject invokeHandler(String name, JSObject... args) {
         JSFunction handler = handlers.get(name);
         if (handler == null) throw new IllegalArgumentException("No handler registered for " + name);
         if(args.length == 0) return (JSObject) handler.call(handler);
@@ -35,6 +41,48 @@ public class JsRISCVIO extends RISCVIO {
         if(args.length == 7) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
         if(args.length == 8) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
         throw new IllegalArgumentException("Too many arguments, max 8");
+    }
+
+    /**
+     * A handler may return the value directly or a promise of it. Anything thenable is awaited,
+     * which suspends the simulation coroutine until it settles; everything else is passed through
+     * untouched, so synchronous handlers keep running without ever yielding to the event loop.
+     */
+    private static JSObject awaitIfThenable(String name, JSObject value) {
+        if (value == null || !isThenable(value)) return value;
+        Settled settled = reflect(value).await();
+        if (settled.isOk()) return settled.getValue();
+        throw rejected(name, settled.getError());
+    }
+
+    private static RISCVIOError rejected(String name, JSObject error) {
+        return new RISCVIOError("Handler " + name + " rejected: " + describe(error));
+    }
+
+    @JSBody(params = "value", script = "return value !== null && value !== void 0 && typeof value.then === 'function';")
+    private static native boolean isThenable(JSObject value);
+
+    /**
+     * JSPromise.await() reports every rejection as a bare RuntimeException, dropping the reason,
+     * so the outcome is reflected into a plain object that can be inspected from Java instead.
+     */
+    @JSBody(params = "value", script = "return Promise.resolve(value).then("
+            + "function (v) { return { ok: true, value: v }; }, "
+            + "function (e) { return { ok: false, error: e }; });")
+    private static native JSPromise<Settled> reflect(JSObject value);
+
+    @JSBody(params = "error", script = "return error instanceof Error ? (error.message || String(error)) : String(error);")
+    private static native String describe(JSObject error);
+
+    private interface Settled extends JSObject {
+        @JSProperty("ok")
+        boolean isOk();
+
+        @JSProperty("value")
+        JSObject getValue();
+
+        @JSProperty("error")
+        JSObject getError();
     }
 
     private int callIntHandler(String name, JSObject... args) {
