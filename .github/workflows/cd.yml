@@ -69,7 +69,11 @@ jobs:
           # npm >= 11.5.1 and Node >= 22.14.0 are required for trusted
           # publishing; Node 24 ships a new enough npm.
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          # Deliberately no registry-url: it makes setup-node write an .npmrc
+          # containing `_authToken=${NODE_AUTH_TOKEN}`. With no token set, npm
+          # sends an empty credential, considers itself authenticated, and so
+          # never performs the OIDC exchange - which fails the publish with a
+          # misleading 404. npm defaults to registry.npmjs.org anyway.
           cache: npm
           cache-dependency-path: rarsjs/ts/package-lock.json
 
