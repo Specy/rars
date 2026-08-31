@@ -40,6 +40,21 @@ loop:
     ecall
 `
 
+const WARNINGS_ONLY_SOURCE = `
+    .data
+val: .byte 300
+    .text
+main:
+    li a7, 10
+    ecall
+`
+
+const REAL_ERROR_SOURCE = `
+    .text
+main:
+    bogus_instruction
+`
+
 // Every handler must be registered; the ones this program cannot reach throw
 // so an unexpected ecall fails the test instead of silently doing nothing.
 const HANDLER_NAMES = [
@@ -48,6 +63,27 @@ const HANDLER_NAMES = [
     'readFloat', 'readInt', 'readString', 'readChar', 'logLine', 'log', 'printChar',
     'printDouble', 'printFloat', 'printInt', 'printString', 'sleep', 'stdIn', 'stdOut', 'stdErr',
 ]
+
+RISCV.setIs64Bit(false)
+
+const warningProgram = RISCV.makeRiscVFromSource(WARNINGS_ONLY_SOURCE)
+const warningsOnly = warningProgram.assemble()
+assert.equal(warningsOnly.hasErrors, false, `warnings-only assembly failed: ${warningsOnly.report}`)
+assert.equal(warningsOnly.hasWarnings, true, 'warnings-only assembly should report warnings')
+assert.ok(warningsOnly.errors.length >= 1, 'warnings-only assembly should include at least one diagnostic')
+assert.equal(warningsOnly.errors.every(error => error.isWarning === true), true, 'every warnings-only diagnostic should expose isWarning: true')
+
+warningProgram.initialize(true)
+let warningSteps = 0
+while (!warningProgram.terminated && warningSteps < 10) {
+    await warningProgram.step()
+    warningSteps++
+}
+assert.ok(warningProgram.terminated, 'warnings-only program should remain runnable')
+
+const realError = RISCV.makeRiscVFromSource(REAL_ERROR_SOURCE).assemble()
+assert.equal(realError.hasErrors, true, 'invalid assembly should report an error')
+assert.ok(realError.errors.some(error => error.isWarning === false), 'invalid assembly should expose isWarning: false')
 
 // The simulator is a shared global, so the two width modes run in sequence.
 for (const is64Bit of [false, true]) {
@@ -68,7 +104,8 @@ for (const is64Bit of [false, true]) {
     assert.equal(riscv.getStopReason(), StopReason.NONE)
 
     const assembled = riscv.assemble()
-    assert.equal(assembled.hasErrors, false, `assembly failed: ${JSON.stringify(assembled.errors)}`)
+    assert.equal(assembled.hasErrors, false, `assembly failed: ${assembled.report}`)
+    assert.equal(assembled.hasWarnings, false, `clean assembly produced warnings: ${assembled.report}`)
 
     riscv.initialize(true)
 

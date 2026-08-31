@@ -28,7 +28,7 @@ public class JsCompilationResult {
         }
 
         @JSExport
-        @JSProperty
+        @JSProperty("isWarning")
         public boolean isWarning() {
             return isWarning;
         }
@@ -83,9 +83,14 @@ public class JsCompilationResult {
     @JSExport
     @JSProperty
     public boolean hasErrors() {
-        return !errors.isEmpty();
+        return errors.stream().anyMatch(e -> !e.isWarning());
     }
 
+    @JSExport
+    @JSProperty
+    public boolean hasWarnings() {
+        return errors.stream().anyMatch(JsCompilationError::isWarning);
+    }
 
     @JSExport
     @JSProperty
