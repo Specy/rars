@@ -102,6 +102,52 @@ Synchronous handlers never yield to the event loop: the simulation runs straight
 returned promise settles on a microtask. Overlapping calls are queued and run one after another,
 never concurrently.
 
+Program time is a handler too, so a run can be given a clock of its own: `sleep` answers syscall 32
+and `time` answers syscall 30. A live run resolves `sleep` on a timer and returns `Date.now()` from
+`time`; a scripted run can settle `sleep` immediately, advance a virtual clock by the requested
+milliseconds and return that clock instead, which keeps elapsed-time output reproducible.
+
+## Memory observers
+
+A memory-mapped device - a framebuffer, a keyboard register - is modelled by observing the memory
+the program reads and writes:
+
+```ts
+// Every write in a framebuffer: (address, length, value), with the width of the store in bytes.
+const frame = riscvSimulator.addMemoryWriteObserver(0x10010000, 0x10012ffc, (address, length, value) => {
+    screen.markDirty(address)
+})
+
+// One memory-mapped register: reads and writes, either of which may be null.
+const receiver = riscvSimulator.addMemoryAccessObserver(
+    0xffff0004,
+    () => keyboard.consumeCharacter(),
+    null
+)
+
+riscvSimulator.removeMemoryObserver(frame)
+riscvSimulator.removeMemoryObservers()
+```
+
+*   Addresses must be word-aligned, `endAddress` is inclusive and covers its whole word, and a range
+    may not cross `0x80000000`; a registration that breaks any of these throws. Either form of a
+    high address is accepted: `0xffff0000` and `0xffff0000 | 0` name the same word.
+*   Handlers are given signed 32 bit integers, as the guest holds them: the register at
+    `0xffff000c` arrives as `-65524`, and a pixel word with its high bit set arrives negative.
+    Apply `>>> 0` wherever the unsigned form is wanted.
+*   Handlers run synchronously inside the instruction that caused the access, so they must be cheap
+    and must not write back into their own range. A returned promise is ignored, unlike an IO
+    handler's.
+*   An observer is notified *after* the access, with the value the program read or stored. A
+    register whose value is consumed by reading it must therefore be reloaded from the handler,
+    with `setPeripheralWord`, for the next read.
+*   Observers live on the simulator's memory, which assembling and initializing only clear the
+    contents of, so a registration survives `assemble()` and `initialize()` and - like a registered
+    IO handler - is shared by every `JsRiscV` instance. Notifications start once a program has been
+    assembled.
+*   `undo()` restores memory through the same stores, so an observed range reports the restored
+    values as ordinary writes and a device that follows notifications alone stays in step.
+
 ## API
 
 ### `RISCV` Static Class
@@ -145,8 +191,14 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getConditionFlags(): number[]`: Gets the 8 condition flags (if applicable, typically related to floating-point or custom extensions).
 * `registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void`: Registers a handler function for a specific event (e.g., syscalls). See `HandlerName`, `HandlerMap` and [IO handlers](#io-handlers) for details.
 * `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
-* `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values.
-* `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`.
+* `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values. Notifies no memory observer: inspecting memory from the host is not the program reading it.
+* `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`, the way the program does: write observers are notified and, while undo is enabled, an undo step is recorded per byte.
+* `setPeripheralWord(address: number, value: number): void`: Writes one word-aligned word as a peripheral would, notifying no observer and recording no undo step. See [memory observers](#memory-observers).
+* `addMemoryWriteObserver(startAddress: number, endAddress: number, handler): number`: Observes every write in an address range. See [memory observers](#memory-observers).
+* `addMemoryAccessObserver(address: number, onRead, onWrite): number`: Observes reads and writes of one word. See [memory observers](#memory-observers).
+* `removeMemoryObserver(handle: number): void`: Removes one registration.
+* `removeMemoryObservers(): void`: Removes every registration.
+* `countMemoryObservers(): number`: The number of live registrations.
 * `getCurrentStatementIndex(): number`: Returns the index of the current instruction in the list of assembled program statements.
 * `getNextStatement(): JsProgramStatement | null`: Returns the next `JsProgramStatement` to be executed, or `null` if at the end.
 * `getStatementAtAddress(address: number): JsProgramStatement | null`: Gets the program statement at the given memory `address`.

@@ -78,6 +78,8 @@ public abstract void printString(String l);
 
 public abstract void sleep(int milliseconds);
 
+public abstract double time();
+
 public abstract void stdIn(byte[] buffer, int length);
 
 public abstract void stdOut(byte[] buffer);
@@ -122,11 +124,45 @@ export type HandlerMap = {
     printFloat: {in: [f: number], out: void}
     printInt: {in: [i: number], out: void}
     printString: {in: [l: string], out: void}
+    /**
+     * Syscall 32: the program asks to be suspended for this many milliseconds. Return a promise
+     * that settles when the wait is over to suspend the simulation without blocking the host.
+     */
     sleep: {in: [milliseconds: number], out: void}
+    /**
+     * Syscall 30: the program time in milliseconds, split by the syscall into a0 (low word) and
+     * a1 (high word). Answer with `Date.now()` for a live run, or with a virtual clock for a
+     * scripted one, so that elapsed-time output stays reproducible.
+     */
+    time: {in: [], out: number}
     stdIn: {in: [buffer: number[], length: number], out: void}
     stdOut: {in: [buffer: number[]], out: void}
     stdErr: {in: [buffer: number[]], out: void}
 }
+
+/**
+ * Notified after a write anywhere in an observed address range.
+ *
+ * `length` is the width of the access in bytes (4, 2 or 1) and `value` is what the program stored,
+ * so a byte or halfword store reports only the bytes it touched; a peripheral that mirrors whole
+ * words should re-read the containing word with `readMemoryBytes` rather than trust `value`.
+ *
+ * Both `address` and `value` are signed 32 bit integers, as the guest holds them: the register at
+ * `0xffff000c` arrives as `-65524`, and a pixel word with its high bit set arrives negative too.
+ * Apply `>>> 0` wherever the unsigned form is wanted.
+ */
+export type MemoryWriteObserver = (address: number, length: number, value: number) => void
+
+/**
+ * Notified after a read or a write of one observed word, with the same signed 32 bit numbers as
+ * `MemoryWriteObserver`. `value` is the value the program read or stored; on a read it is what
+ * memory held *before* the observer ran, so a register whose value is consumed by reading it must
+ * be reloaded from the handler for the next read.
+ */
+export type MemoryAccessObserver = (address: number, value: number) => void
+
+/** Identifies one registration, for `removeMemoryObserver`. */
+export type MemoryObserverHandle = number
 
 export type JsInstruction = {
     name: string;
@@ -540,6 +576,9 @@ export interface JsRiscV {
 
     /**
      * Reads a sequence of bytes from memory.
+     *
+     * Reading through this method notifies no memory observer: inspecting memory from the host is
+     * not the program reading it, so a memory viewer never drives a memory-mapped register.
      * @param address The starting memory address.
      * @param length The number of bytes to read.
      * @returns An array of bytes read from memory.
@@ -548,10 +587,69 @@ export interface JsRiscV {
 
     /**
      * Writes a sequence of bytes to memory.
+     *
+     * Unlike `readMemoryBytes`, this writes the way the program does: it notifies write observers
+     * and, while undo is enabled, records an undo step per byte. Use `setPeripheralWord` for a
+     * device keeping its own register up to date.
      * @param address The starting memory address.
      * @param bytes An array of bytes to write to memory.
      */
     setMemoryBytes(address: number, bytes: number[]): void;
+
+    /**
+     * Writes one word as a peripheral would: no observer is notified and no undo step is recorded,
+     * because the write is not the program acting. This is how a device model refreshes a
+     * memory-mapped register - a ready bit, a pending character - without feeding its own observer
+     * or consuming undo history.
+     * @param address The word address, which must be word-aligned. Either form of a high address
+     * is accepted: `0xffff0000` and `0xffff0000 | 0` name the same word.
+     * @param value The 32 bit value to store, raw, without byte-order adjustment.
+     */
+    setPeripheralWord(address: number, value: number): void;
+
+    /**
+     * Observes every write in an address range, the shape a framebuffer wants.
+     *
+     * Both addresses must be word-aligned, `endAddress` is inclusive and covers its whole word, and
+     * the range may not cross 0x80000000 (split it in two registrations instead); a range that
+     * breaks any of these throws. Either form of a high address is accepted: `0xffff0000` and
+     * `0xffff0000 | 0` name the same word. The handler runs synchronously inside the storing instruction, so
+     * it must be cheap and must not write back into its own range; a returned promise is ignored.
+     *
+     * Observers live on the simulator's memory, which assembling and initializing only clear the
+     * contents of, so a registration survives `assemble()` and `initialize()`. For the same reason
+     * it is shared by every `JsRiscV` instance: register once per page, or remove the previous
+     * registration before registering again for a newly built program.
+     *
+     * Notifications only start once a program has been assembled, and undo notifies too: restoring
+     * memory during `undo()` goes through the same stores, so an observed range reports the
+     * restored values as ordinary writes.
+     * @returns A handle for `removeMemoryObserver`.
+     */
+    addMemoryWriteObserver(startAddress: number, endAddress: number, handler: MemoryWriteObserver): MemoryObserverHandle;
+
+    /**
+     * Observes reads and writes of a single word, the shape a memory-mapped register wants. The
+     * address must be word-aligned. Pass `null` for a direction you do not care about. The same
+     * lifetime and synchronous-handler rules as `addMemoryWriteObserver` apply.
+     * @returns A handle for `removeMemoryObserver`.
+     */
+    addMemoryAccessObserver(address: number, onRead: MemoryAccessObserver | null, onWrite: MemoryAccessObserver | null): MemoryObserverHandle;
+
+    /**
+     * Removes one registration. An unknown handle is ignored.
+     */
+    removeMemoryObserver(handle: MemoryObserverHandle): void;
+
+    /**
+     * Removes every registration.
+     */
+    removeMemoryObservers(): void;
+
+    /**
+     * The number of live registrations, across every `JsRiscV` instance.
+     */
+    countMemoryObservers(): number;
 
     /**
      * Gets the index of the current statement in the assembled program.

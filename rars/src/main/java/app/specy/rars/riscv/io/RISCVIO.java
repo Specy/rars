@@ -57,6 +57,13 @@ public abstract class RISCVIO {
 
     public abstract void sleep(int milliseconds);
 
+    /**
+     * Program time in milliseconds, the value the time syscall reports. It is the environment's
+     * clock rather than the host's so that a scripted run can hand out a virtual clock instead of
+     * the wall clock and stay reproducible.
+     */
+    public abstract double time();
+
     public abstract void stdIn(byte[] buffer, int length);
 
     public abstract void stdOut(byte[] buffer);
