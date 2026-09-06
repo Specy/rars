@@ -130,6 +130,12 @@ public class Memory extends Observable {
 
     private Collection<MemoryObservable> observables = getNewMemoryObserversCollection();
 
+    // notifyAnyObservers runs on every instruction fetch and every data access, so it walks this
+    // snapshot instead of the collection: allocating an iterator per access cost about a tenth of
+    // the simulator's throughput as soon as a single observer was registered, even one whose range
+    // no access ever touched.
+    private MemoryObservable[] observablesSnapshot = new MemoryObservable[0];
+
     // The data segment is allocated in blocks of 1024 ints (4096 bytes).  Each block is
     // referenced by a "block table" entry, and the table has 1024 entries.  The capacity
     // is thus 1024 entries * 4096 bytes = 4 MB.  Should be enough to cover most
@@ -441,6 +447,31 @@ public class Memory extends Observable {
      * @throws AddressErrorException If address is not on word boundary.
      **/
     public int setRawWord(int address, int value) throws AddressErrorException {
+        int oldValue = storeRawWord(address, value);
+        notifyAnyObservers(AccessNotice.WRITE, address, WORD_LENGTH_BYTES, value);
+        if (Globals.getSettings().getBackSteppingEnabled()) {
+            Globals.program.getBackStepper().addMemoryRestoreRawWord(address, oldValue);
+        }
+        return oldValue;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Like setRawWord, but notifies no observer and records no undo step. A peripheral keeping its
+     * memory-mapped register up to date is not the program acting, so such a write must neither
+     * feed back into the observer that reported the access nor consume undo history.
+     *
+     * @param address Starting address of Memory address to be set, on a word boundary.
+     * @param value   Value to be stored starting at that address.
+     * @return old value that was replaced by the set operation.
+     * @throws AddressErrorException If address is not on word boundary.
+     **/
+    public int setRawWordNoNotify(int address, int value) throws AddressErrorException {
+        return storeRawWord(address, value);
+    }
+
+    private int storeRawWord(int address, int value) throws AddressErrorException {
         int relative, oldValue = 0;
         checkStoreWordAligned(address);
         if (inDataSegment(address)) {
@@ -474,10 +505,6 @@ public class Memory extends Observable {
             // falls outside addressing range
             throw new AddressErrorException("store address out of range ",
                     SimulationException.STORE_ACCESS_FAULT, address);
-        }
-        notifyAnyObservers(AccessNotice.WRITE, address, WORD_LENGTH_BYTES, value);
-        if (Globals.getSettings().getBackSteppingEnabled()) {
-            Globals.program.getBackStepper().addMemoryRestoreRawWord(address, oldValue);
         }
         return oldValue;
     }
@@ -864,6 +891,20 @@ public class Memory extends Observable {
         return get(address, 1);
     }
 
+    ///////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Reads specified Memory byte into low order 8 bits of int, notifying no observer. Host-side
+     * inspection - a memory viewer, a debugger - is not a program access, so it must not drive
+     * memory-mapped IO.
+     *
+     * @param address Address of Memory byte to be read.
+     * @return Value stored at that address.  Only low order 8 bits used.
+     **/
+    public int getByteNoNotify(int address) throws AddressErrorException {
+        return get(address, 1, false);
+    }
+
     ////////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -1049,6 +1090,7 @@ public class Memory extends Observable {
                     SimulationException.LOAD_ACCESS_FAULT, startAddr);
         }
         observables.add(new MemoryObservable(obs, startAddr, endAddr));
+        refreshObservablesSnapshot();
     }
 
     /**
@@ -1067,6 +1109,7 @@ public class Memory extends Observable {
         for (MemoryObservable o : observables) {
             o.deleteObserver(obs);
         }
+        refreshObservablesSnapshot();
     }
 
     /**
@@ -1075,6 +1118,7 @@ public class Memory extends Observable {
     public void deleteObservers() {
         // just drop the collection
         observables = getNewMemoryObserversCollection();
+        refreshObservablesSnapshot();
     }
 
     /**
@@ -1102,6 +1146,10 @@ public class Memory extends Observable {
 
     private Collection<MemoryObservable> getNewMemoryObserversCollection() {
         return new Vector<>();  // Vectors are thread-safe
+    }
+
+    private void refreshObservablesSnapshot() {
+        observablesSnapshot = observables.toArray(new MemoryObservable[0]);
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -1149,11 +1197,18 @@ public class Memory extends Observable {
     // The "|| Globals.getGui()==null" is a hack added 19 July 2012 DPS.  IF simulation
     // is from command mode, Globals.program is null but still want ability to observe.
     private void notifyAnyObservers(int type, int address, int length, int value) {
-        if ((Globals.program != null) && this.observables.size() > 0) {
-            for (MemoryObservable mo : observables) {
-                if (mo.match(address)) {
-                    mo.notifyObserver(new MemoryAccessNotice(type, address, length, value));
+        MemoryObservable[] snapshot = this.observablesSnapshot;
+        if (snapshot.length == 0 || Globals.program == null) {
+            return;
+        }
+        // The notice is immutable, so overlapping observers share one rather than one each.
+        MemoryAccessNotice notice = null;
+        for (int i = 0; i < snapshot.length; i++) {
+            if (snapshot[i].match(address)) {
+                if (notice == null) {
+                    notice = new MemoryAccessNotice(type, address, length, value);
                 }
+                snapshot[i].notifyObserver(notice);
             }
         }
     }

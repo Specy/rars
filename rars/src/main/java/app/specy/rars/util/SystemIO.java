@@ -127,6 +127,21 @@ public class SystemIO {
         io.printString(string);
     }
 
+    /**
+     * Implements syscall to suspend the program for a while (default 32).
+     */
+    public static void sleep(int milliseconds) {
+        io.sleep(milliseconds);
+    }
+
+    /**
+     * Program time in milliseconds, for the time syscall (default 30). It comes from the IO
+     * environment, not from the host clock, so a scripted run can substitute a virtual clock.
+     */
+    public static double time() {
+        return io.time();
+    }
+
 
     /**
      * Implements syscall to read a string.

@@ -271,7 +271,9 @@ public class JsRiscV {
     public int[] readMemoryBytes(int address, int length) throws AddressErrorException {
         int[] memory = new int[length];
         for (int i = 0; i < length; i++) {
-            memory[i] = Globals.memory.getByte(address + i);
+            // No notification: the host inspecting memory is not the program reading it, and a
+            // memory viewer must not make a memory-mapped register consume its pending input.
+            memory[i] = Globals.memory.getByteNoNotify(address + i);
         }
         return memory;
     }
@@ -280,6 +282,86 @@ public class JsRiscV {
     public void setMemoryBytes(int address, int[] bytes) throws AddressErrorException {
         for (int i = 0; i < bytes.length; i++) {
             Globals.memory.setByte(address + i, bytes[i]);
+        }
+    }
+
+    @JSExport
+    public void setPeripheralWord(double address, int value) throws AddressErrorException {
+        Globals.memory.setRawWordNoNotify(toAddress(address), value);
+    }
+
+    /**
+     * Addresses cross from JavaScript as plain numbers, and one above 2^31-1 - which every
+     * memory-mapped register is - stays positive instead of wrapping into a negative int.
+     * Normalizing here means 0xffff0000 and 0xffff0000 | 0 name the same word, rather than the
+     * unsigned form quietly registering an observer that can never match an access.
+     */
+    private static int toAddress(double address) {
+        return (int) (long) address;
+    }
+
+    /*
+     * Memory observers live on the Memory singleton, which assemble() and initialize() only clear
+     * the contents of, so a registration survives both exactly like a registered IO handler and,
+     * like one, is shared by every JsRiscV instance. The registrations are mirrored here because
+     * Memory.deleteObserver leaves an empty observable behind for every removal and every memory
+     * access walks that collection; removal therefore rebuilds it from the survivors.
+     */
+    private static final List<JsMemoryObserver> memoryObservers = new ArrayList<>();
+    private static int nextMemoryObserverHandle = 1;
+
+    @JSExport
+    public int addMemoryWriteObserver(double startAddress, double endAddress, JSFunction handler)
+            throws AddressErrorException {
+        return addMemoryObserver(JsMemoryObserver.overRange(nextMemoryObserverHandle,
+                toAddress(startAddress), toAddress(endAddress), handler));
+    }
+
+    @JSExport
+    public int addMemoryAccessObserver(double address, JSFunction onRead, JSFunction onWrite)
+            throws AddressErrorException {
+        return addMemoryObserver(
+                JsMemoryObserver.atWord(nextMemoryObserverHandle, toAddress(address), onRead, onWrite));
+    }
+
+    @JSExport
+    public void removeMemoryObserver(int handle) {
+        for (int i = 0; i < memoryObservers.size(); i++) {
+            if (memoryObservers.get(i).handle == handle) {
+                memoryObservers.remove(i);
+                rebuildMemoryObservers();
+                return;
+            }
+        }
+    }
+
+    @JSExport
+    public void removeMemoryObservers() {
+        memoryObservers.clear();
+        Globals.memory.deleteObservers();
+    }
+
+    @JSExport
+    public int countMemoryObservers() {
+        return memoryObservers.size();
+    }
+
+    private static int addMemoryObserver(JsMemoryObserver observer) throws AddressErrorException {
+        // Registering first leaves the mirror untouched when the range is rejected.
+        Globals.memory.addObserver(observer, observer.startAddress, observer.endAddress);
+        memoryObservers.add(observer);
+        nextMemoryObserverHandle++;
+        return observer.handle;
+    }
+
+    private static void rebuildMemoryObservers() {
+        Globals.memory.deleteObservers();
+        for (JsMemoryObserver observer : memoryObservers) {
+            try {
+                Globals.memory.addObserver(observer, observer.startAddress, observer.endAddress);
+            } catch (AddressErrorException alreadyValidated) {
+                // Every surviving registration passed this same check when it was added.
+            }
         }
     }
 

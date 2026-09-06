@@ -3,7 +3,6 @@ package app.specy.rars.riscv.syscalls;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
-import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
 
 /*
@@ -34,17 +33,23 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 (MIT license, http://www.opensource.org/licenses/mit-license.html)
  */
 
-public class SyscallTime extends AbstractSyscall {
-    public SyscallTime() {
-        super("Time", "Get the current time (milliseconds since 1 January 1970)", "N/A", "a0 = low order 32 bits<br>a1=high order 32 bits");
+/**
+ * Service to suspend the program for the number of milliseconds in a0.
+ */
+
+public class SyscallSleep extends AbstractSyscall {
+    public SyscallSleep() {
+        super("Sleep", "Set the current thread to sleep for a time (not precise)",
+                "a0 = time to sleep in milliseconds", "N/A");
     }
 
+    /**
+     * Performs syscall function to pause the program for a0 milliseconds. The wait itself belongs
+     * to the IO environment: the host cannot block here, so the handler is what suspends the
+     * simulation and resumes it when the time has passed.
+     */
     public void simulate(ProgramStatement statement) {
-        // Program time comes from the IO environment rather than java.util.Date so that a scripted
-        // run can answer with a virtual clock and stay reproducible.
-        long value = (long) SystemIO.time();
-        RegisterFile.updateRegister("a0", Binary.lowOrderLongToInt(value));
-        RegisterFile.updateRegister("a1", Binary.highOrderLongToInt(value));
+        SystemIO.sleep(RegisterFile.getValue("a0"));
     }
 
 }
