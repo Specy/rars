@@ -13,18 +13,20 @@ public class JsCompilationResult {
     public class JsCompilationError {
         private boolean isWarning;
         private String message;
-        private String macroExpansionHistory;
-        private String filename;
-        private int lineNumber;
-        private int columnNumber;
+        private JsSourceLocation[] macroExpansionTrace;
+        private String sourcePath;
+        private int sourceLine;
+        private int sourceColumn;
 
         public JsCompilationError(ErrorMessage error) {
             this.isWarning = error.isWarning();
             this.message = error.getMessage();
-            this.macroExpansionHistory = error.getMacroExpansionHistory();
-            this.filename = error.getFilename();
-            this.lineNumber = error.getLine();
-            this.columnNumber = error.getPosition();
+            this.macroExpansionTrace = error.getMacroExpansionTrace().stream()
+                    .map(JsSourceLocation::new)
+                    .toArray(JsSourceLocation[]::new);
+            this.sourcePath = error.getSourcePath();
+            this.sourceLine = error.getLine();
+            this.sourceColumn = error.getPosition();
         }
 
         @JSExport
@@ -41,26 +43,26 @@ public class JsCompilationResult {
 
         @JSExport
         @JSProperty
-        public String getMacroExpansionHistory() {
-            return macroExpansionHistory;
+        public JsSourceLocation[] getMacroExpansionTrace() {
+            return macroExpansionTrace;
         }
 
         @JSExport
         @JSProperty
-        public String getFilename() {
-            return filename;
+        public String getSourcePath() {
+            return sourcePath;
         }
 
         @JSExport
         @JSProperty
-        public int getLineNumber() {
-            return lineNumber;
+        public int getSourceLine() {
+            return sourceLine;
         }
 
         @JSExport
         @JSProperty
-        public int getColumnNumber() {
-            return columnNumber;
+        public int getSourceColumn() {
+            return sourceColumn;
         }
     }
 

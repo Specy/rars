@@ -2,10 +2,11 @@ package app.specy.rars.assembler;
 
 import app.specy.rars.*;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
+import app.specy.rars.riscv.fs.SourcePath;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 /*
 Copyright (c) 2003-2013,  Pete Sanderson and Kenneth Vollmar
@@ -92,24 +93,31 @@ public class Tokenizer {
         sourceRISCVprogram = p;
         equivalents = new HashMap<>(); // DPS 11-July-2012
         ArrayList<TokenList> tokenList = new ArrayList<>();
-        //ArrayList source = p.getSourceList();
-        ArrayList<SourceLine> source = processIncludes(p, new HashMap<>(), files); // DPS 9-Jan-2013
+        List<String> includeStack = new ArrayList<>();
+        includeStack.add(p.getFilename());
+        ArrayList<SourceLine> source = processIncludes(p, includeStack, files); // DPS 9-Jan-2013
         p.setSourceLineList(source);
         TokenList currentLineTokens;
         String sourceLine;
         for (int i = 0; i < source.size(); i++) {
-            sourceLine = source.get(i).getSource();
+            SourceLine originalLine = source.get(i);
+            sourceLine = originalLine.getProcessedSource();
             currentLineTokens = this.tokenizeLine(i + 1, sourceLine);
+            for (int tokenIndex = 0; tokenIndex < currentLineTokens.size(); tokenIndex++) {
+                currentLineTokens.get(tokenIndex).setOriginal(
+                        originalLine.getRISCVprogram(), originalLine.getLineNumber());
+            }
             tokenList.add(currentLineTokens);
             // DPS 03-Jan-2013. Related to 11-July-2012. If source code substitution was made
             // based on .eqv directive during tokenizing, the processed line, a String, is
             // not the same object as the original line.  Thus I can use != instead of !equals()
             // This IF statement will replace original source with source modified by .eqv substitution.
             // Not needed by assembler, but looks better in the Text Segment Display.
-            if (sourceLine.length() > 0 && sourceLine != currentLineTokens.getProcessedLine()) {
-                source.set(i, new SourceLine(currentLineTokens.getProcessedLine(), source.get(i).getRISCVprogram(), source.get(i).getLineNumber()));
+            if (!sourceLine.equals(currentLineTokens.getProcessedLine())) {
+                source.set(i, originalLine.withProcessedSource(currentLineTokens.getProcessedLine()));
             }
         }
+        p.setSourceLineList(source);
         if (errors.errorsOccurred()) {
             throw new AssemblyException(errors);
         }
@@ -124,7 +132,8 @@ public class Tokenizer {
     // files that themselves have .include.  Plus it will detect and report recursive
     // includes both direct and indirect.
     // DPS 11-Jan-2013
-    private ArrayList<SourceLine> processIncludes(RISCVprogram program, Map<String, String> inclFiles, RISCVFileSystem files) throws AssemblyException {
+    private ArrayList<SourceLine> processIncludes(RISCVprogram program, List<String> includeStack,
+                                                   RISCVFileSystem files) throws AssemblyException {
         ArrayList<String> source = program.getSourceList();
         ArrayList<SourceLine> result = new ArrayList<>(source.size());
         for (int i = 0; i < source.size(); i++) {
@@ -137,37 +146,37 @@ public class Tokenizer {
                         && tl.get(ii + 1).getType() == TokenTypes.QUOTED_STRING) {
                     String filename = tl.get(ii + 1).getValue();
                     filename = filename.substring(1, filename.length() - 1); // get rid of quotes
-                    // Handle either absolute or relative pathname for .include file
-                    if (!this.isPathAbsolute(filename)) {
-                        filename = this.getPathParent(program.getFilename()) + "/" + filename;
-                    }
-                    if (inclFiles.containsKey(filename)) {
-                        // This is a recursive include.  Generate error message and return immediately.
+                    try {
+                        filename = SourcePath.resolveInclude(program.getFilename(), filename);
+                    } catch (IllegalArgumentException invalidPath) {
                         Token t = tl.get(ii + 1);
                         errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
-                                "Recursive include of file " + filename));
+                                invalidPath.getMessage()));
                         throw new AssemblyException(errors);
                     }
-                    inclFiles.put(filename, filename);
+                    if (includeStack.contains(filename)) {
+                        Token t = tl.get(ii + 1);
+                        List<String> cycle = new ArrayList<>(includeStack);
+                        cycle.add(filename);
+                        errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
+                                "Include cycle: " + String.join(" -> ", cycle)));
+                        throw new AssemblyException(errors);
+                    }
                     RISCVprogram incl = new RISCVprogram();
                     try {
-                        String finalFileName = filename;
-                        RISCVFile file = files.getFiles().stream().filter(f -> f.getName().equals(finalFileName)).findFirst().orElse(null);
-                        if (file == null) {
-                            Token t = tl.get(ii + 1);
-                            errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
-                                    "Error reading include file " + filename));
-                            throw new AssemblyException(errors);
-                        }
-                        incl.readSource(file.getName(), file.getSource());
-                    } catch (AssemblyException p) {
+                        incl.readSource(filename, files.read(filename));
+                    } catch (RuntimeException missingFile) {
                         Token t = tl.get(ii + 1);
                         errors.add(new ErrorMessage(program, t.getSourceLine(), t.getStartPos(),
                                 "Error reading include file " + filename));
                         throw new AssemblyException(errors);
                     }
-                    ArrayList<SourceLine> allLines = processIncludes(incl, inclFiles, files);
-                    result.addAll(allLines);
+                    includeStack.add(filename);
+                    try {
+                        result.addAll(processIncludes(incl, includeStack, files));
+                    } finally {
+                        includeStack.remove(includeStack.size() - 1);
+                    }
                     hasInclude = true;
                     break;
                 }
@@ -197,22 +206,6 @@ public class Tokenizer {
         }
         return result;
     }
-
-    private boolean isPathAbsolute(String path){
-        return path.startsWith("/");
-    }
-
-    private String getPathParent(String path) {
-        if (path == null || path.isEmpty()) {
-            return null;
-        }
-        int lastSeparatorIndex = path.lastIndexOf('/');
-        if (lastSeparatorIndex == -1) {
-            return null;
-        }
-        return path.substring(0, lastSeparatorIndex);
-    }
-
 
     /**
      * Will tokenize one line of source code.  If lexical errors are discovered,

@@ -1,6 +1,9 @@
 package app.specy.rarsjs;
 
 import app.specy.rars.*;
+import app.specy.rars.assembler.SourceLine;
+import app.specy.rars.assembler.TokenList;
+import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
@@ -42,9 +45,16 @@ public class JsRiscV {
     }
 
     @JSExport
-    public static JsRiscV makeRiscVfromSource(String source) throws AssemblyException {
+    public static JsRiscV makeRiscVFromFiles(String[] sourcePaths, String[] sources, String entryFile) {
         JsRiscV.getIOHandler(); // Ensure that the IO handler is initialized
-        return new JsRiscV(RARS.fromSource(source));
+        if (sourcePaths == null || sources == null || sourcePaths.length != sources.length) {
+            throw new IllegalArgumentException("Source paths and contents must have the same length");
+        }
+        MemoryFileSystem files = new MemoryFileSystem();
+        for (int i = 0; i < sourcePaths.length; i++) {
+            files.write(sourcePaths[i], sources[i]);
+        }
+        return new JsRiscV(RARS.fromFs(entryFile, files));
     }
 
     @JSExport
@@ -58,13 +68,21 @@ public class JsRiscV {
 
     @JSExport
     public JsRiscVTokenizedLine[] getTokenizedLines() {
-        return this.main.getTokens().stream().map((v) -> {
-            JsRiscVToken[] tokens = new JsRiscVToken[v.size()];
-            for (int i = 0; i < v.size(); i++) {
-                tokens[i] = new JsRiscVToken(v.get(i));
+        List<TokenList> tokenizedLines = this.main.getTokens();
+        List<SourceLine> sourceLines = this.main.getSourceLines();
+        JsRiscVTokenizedLine[] result = new JsRiscVTokenizedLine[tokenizedLines.size()];
+        for (int lineIndex = 0; lineIndex < tokenizedLines.size(); lineIndex++) {
+            TokenList tokenizedLine = tokenizedLines.get(lineIndex);
+            SourceLine sourceLine = sourceLines.get(lineIndex);
+            JsRiscVToken[] tokens = new JsRiscVToken[tokenizedLine.size()];
+            for (int tokenIndex = 0; tokenIndex < tokenizedLine.size(); tokenIndex++) {
+                tokens[tokenIndex] = new JsRiscVToken(tokenizedLine.get(tokenIndex));
             }
-            return new JsRiscVTokenizedLine(v.getProcessedLine(), tokens);
-        }).toArray(JsRiscVTokenizedLine[]::new);
+            result[lineIndex] = new JsRiscVTokenizedLine(sourceLine.getSourcePath(),
+                    sourceLine.getLineNumber(), sourceLine.getOriginalSource(),
+                    sourceLine.getProcessedSource(), tokens);
+        }
+        return result;
     }
 
     @JSExport
@@ -388,12 +406,6 @@ public class JsRiscV {
     }
 
     @JSExport
-    public int getCurrentStatementIndex() {
-        return this.main.getStatementAtAddress(this.getProgramCounter()).getSourceLine();
-    }
-
-
-    @JSExport
     public JsProgramStatement getNextStatement() {
         return new JsProgramStatement(this.main.getStatementAtAddress(this.getProgramCounter()));
     }
@@ -424,12 +436,14 @@ public class JsRiscV {
     }
 
     @JSExport
-    public JsProgramStatement getStatementAtSourceLine(int line) {
-        ProgramStatement s = this.main.getAddressFromSourceLine(line);
-        if(s == null) {
-            return null;
+    public JsProgramStatement[] getStatementsAtSourceLocation(String sourcePath, double sourceLine) {
+        if (!Double.isFinite(sourceLine) || sourceLine < 1 || sourceLine != Math.floor(sourceLine)
+                || sourceLine > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Source line must be a positive integer");
         }
-        return new JsProgramStatement(s);
+        return this.main.getStatementsAtSourceLocation(sourcePath, (int) sourceLine).stream()
+                .map(JsProgramStatement::new)
+                .toArray(JsProgramStatement[]::new);
     }
 
     @JSExport

@@ -150,10 +150,9 @@ public class Assembler {
                     // record this token's original source program and line #. Differs from final, if .include used
                     t.setOriginal(sourceLineList.get(i).getRISCVprogram(), sourceLineList.get(i).getLineNumber());
                 }
+                SourceLine sourceLocation = sourceLineList.get(i);
                 statements = this.parseLine(tokenList.get(i),
-                        sourceLineList.get(i).getSource(),
-                        sourceLineList.get(i).getLineNumber(),
-                        extendedAssemblerEnabled);
+                        sourceLocation.getLineNumber(), extendedAssemblerEnabled, sourceLocation);
                 if (statements != null) {
                     parsedList.addAll(statements);
                 }
@@ -258,11 +257,12 @@ public class Assembler {
                         ArrayList<Instruction> instrMatches = this.matchInstruction(newTokenList.get(0));
                         Instruction instr = OperandFormat.bestOperandMatch(newTokenList,
                                 instrMatches);
-                        // Only first generated instruction is linked to original source
+                        // Every generated instruction keeps the original source location.
                         ProgramStatement ps = new ProgramStatement(
                                 this.fileCurrentlyBeingAssembled,
-                                (instrNumber == 0) ? statement.getSource() : "", newTokenList,
-                                newTokenList, instr, textAddress.get(), statement.getSourceLine());
+                                statement.getSource(), newTokenList,
+                                newTokenList, instr, textAddress.get(), statement.getSourcePath(),
+                                statement.getSourceLine(), statement.getMacroExpansionTrace());
                         textAddress.increment(Instruction.INSTRUCTION_LENGTH);
                         ps.buildBasicStatementFromBasicInstruction(errors);
                         machineList.add(ps);
@@ -287,8 +287,8 @@ public class Assembler {
                 Globals.memory.setStatement(statement.getAddress(), statement);
             } catch (AddressErrorException e) {
                 Token t = statement.getOriginalTokenList().get(0);
-                errors.add(new ErrorMessage(t.getSourceProgram(), t.getSourceLine(), t
-                        .getStartPos(), "Invalid address for text segment: " + e.getAddress()));
+                errors.add(new ErrorMessage(statement, t.getStartPos(),
+                        "Invalid address for text segment: " + e.getAddress()));
             }
         }
         // Aug. 24, 2005 Ken Vollmar
@@ -320,7 +320,7 @@ public class Assembler {
             ProgramStatement ps1 = instructions.get(i);
             ProgramStatement ps2 = instructions.get(i + 1);
             if (ps1.getAddress() == ps2.getAddress()) {
-                errors.add(new ErrorMessage(ps2.getSourceProgram(), ps2.getSourceLine(), 0,
+                errors.add(new ErrorMessage(ps2, 0,
                         "Duplicate text segment address: "
                                 + ps2.getAddress()
                                 + " already occupied by " + ps1.getSourceFile() + " line "
@@ -332,20 +332,19 @@ public class Assembler {
     }
 
     /**
-     * This method parses one line of RISCV source code. It works with the list
-     * of tokens, but original source is also provided. It also carries out
-     * directives, which includes initializing the data segment. This method is
-     * invoked in the assembler first pass.
+     * This method parses one line of RISCV source code and carries out directives,
+     * including data segment initialization. It is invoked in the assembler first pass.
      *
      * @param tokenList
-     * @param source
      * @param sourceLineNumber
      * @param extendedAssemblerEnabled
+     * @param sourceLocation original source line represented by the token list
      * @return ArrayList of ProgramStatements because parsing a macro expansion
      * request will return a list of ProgramStatements expanded
      */
-    private ArrayList<ProgramStatement> parseLine(TokenList tokenList, String source,
-                                                  int sourceLineNumber, boolean extendedAssemblerEnabled) {
+    private ArrayList<ProgramStatement> parseLine(TokenList tokenList, int sourceLineNumber,
+                                                  boolean extendedAssemblerEnabled,
+                                                  SourceLine sourceLocation) {
 
         ArrayList<ProgramStatement> ret = new ArrayList<>();
 
@@ -413,6 +412,13 @@ public class Assembler {
                     String substituted = macro.getSubstitutedLine(i, tokens, counter, errors);
                     TokenList tokenList2 = fileCurrentlyBeingAssembled.getTokenizer().tokenizeLine(
                             i, substituted, errors);
+                    SourceLine macroDefinitionLine = fileCurrentlyBeingAssembled.getSourceLineInfo(i);
+                    if (macroDefinitionLine != null) {
+                        for (Token expandedToken : tokenList2) {
+                            expandedToken.setOriginal(
+                                    macroDefinitionLine.getRISCVprogram(), macroDefinitionLine.getLineNumber());
+                        }
+                    }
 
                     // If token list getProcessedLine() is not empty, then .eqv was performed and it contains the modified source.
                     // Put it into the line to be parsed, so it will be displayed properly in text segment display. DPS 23 Jan 2013
@@ -420,8 +426,8 @@ public class Assembler {
                         substituted = tokenList2.getProcessedLine();
 
                     // recursively parse lines of expanded macro
-                    ArrayList<ProgramStatement> statements = parseLine(tokenList2, "<" + (i - macro.getFromLine() + macro.getOriginalFromLine()) + "> "
-                            + substituted.trim(), sourceLineNumber, extendedAssemblerEnabled);
+                    ArrayList<ProgramStatement> statements = parseLine(tokenList2,
+                            sourceLineNumber, extendedAssemblerEnabled, sourceLocation);
                     if (statements != null)
                         ret.addAll(statements);
                 }
@@ -486,8 +492,9 @@ public class Assembler {
                         "Extended (pseudo) instruction or format not permitted.  See Settings."));
             }
             if (OperandFormat.tokenOperandMatch(tokens, inst, errors)) {
-                programStatement = new ProgramStatement(this.fileCurrentlyBeingAssembled, source,
-                        tokenList, tokens, inst, textAddress.get(), sourceLineNumber);
+                programStatement = new ProgramStatement(this.fileCurrentlyBeingAssembled,
+                        sourceLocation.getOriginalSource(), tokenList, tokens, inst, textAddress.get(),
+                        sourceLocation.getSourcePath(), sourceLineNumber, macroPool.getExpansionTrace());
                 // instruction length is 4 for all basic instruction, varies for extended instruction
                 // Modified to permit use of compact expansion if address fits
                 // in 15 bits. DPS 4-Aug-2009

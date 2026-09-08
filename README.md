@@ -17,22 +17,33 @@ It is part of a family of javascript assembly interpreters/simulators:
 
 ## Usage
 
-First, create an instance of the simulator with the `RISCV.makeRiscvFromSource` function.
+First, create an instance of the simulator with `makeRiscVFromFiles`. Supply a virtual source tree and the path of its entry file. Relative `.include` paths resolve from the file containing the directive, while paths beginning with `/` resolve from the virtual root.
 
 Before running the simulator, you must assemble and initialize it. You can then step through the program, simulate with breakpoints, or simulate with a limit.
 
 ⚠️**WARNING**⚠️ You must have only one instance of the simulator at a time. Memory, registers, and other state may be shared or behave unpredictably with multiple instances.
 
 ```typescript
-import {RISCV, JsRiscV, RegisterName, BackStepAction} from '@specy/risc-v';
-const sourceCode = `
-    li t0, 5          # Load immediate value 5 into register t0
-    li t1, 7          # Load immediate value 7 into register t1
-    add t2, t0, t1    # Add t0 and t1, store result in t2
-`;
+import {RISCV, makeRiscVFromFiles, JsRiscV, RegisterName, BackStepAction} from '@specy/risc-v';
+
+const files = {
+  'src/main.asm': `
+    .include "lib/math.asm"
+    .text
+    .globl main
+  main:
+    add_values(t2, 5, 7)
+  `,
+  'src/lib/math.asm': `
+    .macro add_values(%result, %left, %right)
+      li %result, %left
+      addi %result, %result, %right
+    .end_macro
+  `,
+} as const;
 
 // RISCV.setIs64Bit(true); // Set to 64-bit mode if needed
-const riscvSimulator: JsRiscV = RISCV.makeRiscVFromSource(sourceCode);
+const riscvSimulator: JsRiscV = makeRiscVFromFiles(files, 'src/main.asm');
 
 riscvSimulator.assemble();
 riscvSimulator.initialize(true); // Start at 'main'
@@ -116,10 +127,10 @@ never concurrently.
 
 Provides static methods to initialize and create simulator instances.
 
-* `RISCV.makeRiscvFromSource(source: string): JsRiscv`
-  Creates a new `JsRiscv` instance from RISC-V assembly source code. This also initializes the underlying RISC-V simulation environment if it hasn't been already.
+* `makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string): JsRiscV`
+  Creates a simulator from a snapshot of a virtual source tree and its entry file. Source paths are canonical, root-relative POSIX paths. The factory is also available as `RISCV.makeRiscVFromFiles` and initializes the simulation environment when needed.
 * `RISCV.initializeRISCV(): void`
-  Initializes the core RISC-V simulation environment. Called internally by `makeRiscvFromSource`, but can be called explicitly if needed.
+  Initializes the core RISC-V simulation environment. Called internally by `makeRiscVFromFiles`, but can be called explicitly if needed.
 * `RISCV.getInstructionSet(): JsInstruction[]`
   Returns an array of objects, each describing a supported RISC-V instruction (name, example, description, tokens).
 * `RISCV.setIs64Bit(is64Bit: boolean): void`
@@ -155,13 +166,12 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
 * `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values.
 * `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`.
-* `getCurrentStatementIndex(): number`: Returns the index of the current instruction in the list of assembled program statements.
 * `getNextStatement(): JsProgramStatement | null`: Returns the next `JsProgramStatement` to be executed, or `null` if at the end.
 * `getStatementAtAddress(address: number): JsProgramStatement | null`: Gets the program statement at the given memory `address`.
-* `getStatementAtSourceLine(line: number): JsProgramStatement | null`: Gets the program statement corresponding to the original source `line` number.
-* `getCompiledStatements(): JsProgramStatement[]`: Returns an array of all assembled program statements.
-* `getParsedStatements(): JsInstructionToken[]`: Returns an array of tokens from the initial parsing stage.
-* `getTokenizedLines(): RiscvTokenizedLine[]`: Returns an array of lines, each with its source string and corresponding tokens.
+* `getStatementsAtSourceLocation(sourcePath: string, sourceLine: number): JsProgramStatement[]`: Returns every machine statement generated from an original one-based source location, in address order. Pseudo-instructions and macro calls can produce multiple results.
+* `getCompiledStatements(): JsProgramStatement[]`: Returns all machine statements after a successful assembly.
+* `getParsedStatements(): JsProgramStatement[]`: Returns the parsed statements before pseudo-instruction expansion.
+* `getTokenizedLines(): RiscvTokenizedLine[]`: Returns the expanded source stream with each line's path, one-based line number, original source, processed source, and tokens. It is available after tokenization succeeds, including when a later assembly stage fails.
 * `getCallStack(): JsRiscvStackFrame[]`: Returns the current call stack as an array of stack frame objects.
 * `getLabelAtAddress(address: number): string | null`: Returns the label name at the given memory `address`, or `null` if no label exists there.
 
@@ -173,6 +183,8 @@ This interface provides methods to control and interact with a RISC-V simulator 
 #### Types
 
 * `RegisterName`: Union type for RISC-V register names (e.g., `'ra'`, `'sp'`, `'a0'`, `'t0'`, etc.).
+* `RISCVSourceSet`: A read-only mapping from canonical virtual source paths to source strings.
+* `RISCVSourceLocation`: A source path and one-based source line.
 * `HandlerName`: Union type of all possible handler names (keys of `HandlerMap`).
 * `HandlerMap`: An object type mapping `HandlerName`s to their expected input argument types (`in`) and return type (`out`). This defines the signature for syscall/event handlers.
 * `HandlerMapFns`: An object type where keys are `HandlerName`s and values are the corresponding handler functions.
@@ -180,10 +192,10 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `ConfirmResult`: Enum for confirm dialog results (`YES`, `NO`, `CANCEL`).
 * `BackStepAction`: Enum representing types of actions that can be undone (e.g., `MEMORY_RESTORE_WORD`, `REGISTER_RESTORE`).
 * `JsBackStep`: Interface representing an entry in the undo stack, detailing the action, parameters, and PC value.
-* `JsProgramStatement`: Interface representing an assembled instruction, including source line, address, binary/machine/assembly representations.
-* `JsInstructionToken`: Interface representing a token from the assembly source (value, type, source position).
+* `JsProgramStatement`: Interface representing an assembled instruction, including its source path, source line, address, binary/machine/assembly representations, and full original source line.
+* `JsInstructionToken`: Interface representing a token from the assembly source (value, type, and one-based source column).
 * `JsInstruction`: Interface describing a RISC-V instruction (name, example, description, token patterns).
-* `RiscvTokenizedLine`: An object containing the original line string and its parsed `JsInstructionToken`s.
-* `RISCVAssembleError`: Interface describing an assembly error (message, line/column, warning status, etc.).
+* `RiscvTokenizedLine`: An object containing source identity, original and processed line strings, and parsed `JsInstructionToken`s.
+* `RISCVAssembleError`: Interface describing an assembly diagnostic with its source path, one-based line and column, warning status, and structured macro expansion trace.
 * `RISCVAssembleResult`: Interface for the result of `assemble()`, containing a report string, list of `RISCVAssembleError`s, and a `hasErrors` boolean.
 * `JsRiscvStackFrame`: Interface describing a frame on the call stack (PC, target address, SP, FP, register snapshot).

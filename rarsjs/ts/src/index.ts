@@ -1,11 +1,10 @@
 //@ts-ignore
-import {makeRiscVfromSource as _makeRiscVfromSource, initializeRISCV as _initializeRISCV, getInstructionSet as _getInstructionSet, setIs64Bit as _setIs64Bit, is64Bit as _is64Bit} from './generated/rars'
+import {makeRiscVFromFiles as _makeRiscVFromFiles, initializeRISCV as _initializeRISCV, getInstructionSet as _getInstructionSet, setIs64Bit as _setIs64Bit, is64Bit as _is64Bit} from './generated/rars'
 
 
 export type JsInstructionToken = {
-    sourceLine: number;
+    /** One-based column in the processed source line. */
     sourceColumn: number;
-    originalSourceLine: number;
     value: string;
     type: string
 }
@@ -173,17 +172,33 @@ export type JsInstruction = {
 }
 
 export type RiscvTokenizedLine = {
-    line: string;
+    sourcePath: string;
+    /** One-based line in `sourcePath`. */
+    sourceLine: number;
+    /** Exact line supplied in the source set. */
+    source: string;
+    /** Line after assembler substitutions such as `.eqv`. */
+    processedSource: string;
     tokens: JsInstructionToken[]
 }
+
+export type RISCVSourceLocation = {
+    sourcePath: string
+    /** One-based line in `sourcePath`. */
+    sourceLine: number
+}
+
+export type RISCVSourceSet = Readonly<Record<string, string>>
 
 export type RISCVAssembleError = {
     isWarning: boolean
     message: string
-    macroExpansionHistory: string
-    filename: string
-    lineNumber: number
-    columnNumber: number
+    macroExpansionTrace: RISCVSourceLocation[]
+    sourcePath: string
+    /** One-based line in `sourcePath`. */
+    sourceLine: number
+    /** One-based column in `sourcePath`. Zero only for diagnostics without a source location. */
+    sourceColumn: number
 }
 
 export type RISCVAssembleResult = {
@@ -197,7 +212,7 @@ export type RISCVAssembleResult = {
 
 
 export class RISCV {
-    public static makeRiscVFromSource = makeRiscVfromSource
+    public static makeRiscVFromFiles = makeRiscVFromFiles
     public static initializeRISCV = initializeRISCV
     public static getInstructionSet(){
         return _getInstructionSet() as JsInstruction[]
@@ -240,9 +255,9 @@ export type JsRiscVStackFrame = {
  * Represents a statement in the assembled program.
  */
 export interface JsProgramStatement {
-    /**
-     * The line number in the original source code.
-     */
+    /** Canonical path of the original source file. */
+    readonly sourcePath: string;
+    /** The one-based line number in the original source file. */
     readonly sourceLine: number;
     /**
      * The memory address of the instruction.
@@ -436,11 +451,8 @@ export interface JsRiscV {
      */
     getStatementAtAddress(address: number): JsProgramStatement;
 
-    /**
-     * Gets the statement at the given source line.
-     * @param line
-     */
-    getStatementAtSourceLine(line: number): JsProgramStatement;
+    /** Gets every machine statement generated from an original source location. */
+    getStatementsAtSourceLocation(sourcePath: string, sourceLine: number): JsProgramStatement[];
 
 
     getTokenizedLines(): RiscvTokenizedLine[]
@@ -467,7 +479,7 @@ export interface JsRiscV {
     getCompiledStatements(): JsProgramStatement[]
 
 
-    getParsedStatements(): JsInstructionToken[]
+    getParsedStatements(): JsProgramStatement[]
 
 
     /**
@@ -652,12 +664,6 @@ export interface JsRiscV {
     countMemoryObservers(): number;
 
     /**
-     * Gets the index of the current statement in the assembled program.
-     * @returns The index of the current statement.
-     */
-    getCurrentStatementIndex(): number;
-
-    /**
      * Gets the next statement to be executed.
      * @returns The next `JsProgramStatement`.
      */
@@ -680,13 +686,33 @@ export interface JsRiscV {
 
 
 /**
- * Creates a new RISCV simulator from the given source code.
- * @param source The source code to assemble.
+ * Creates a RISC-V simulator from a virtual source tree and its entry file.
+ *
+ * Source paths are canonical, root-relative, case-sensitive POSIX paths. The source set is
+ * snapshotted by this call; only the entry file and files reached through `.include` are assembled.
+ * @param files Source text keyed by canonical source path.
+ * @param entryFile Canonical path of the file from which include expansion starts.
  * @returns A new `JsRiscV` object.
  */
-function makeRiscVfromSource(source: string): JsRiscV {
-    _initializeRISCV()
-    return _makeRiscVfromSource(source) as JsRiscV
+export function makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string): JsRiscV {
+    if (files === null || typeof files !== 'object' || Array.isArray(files)) {
+        throw new TypeError('Source set must be an object')
+    }
+    if (typeof entryFile !== 'string') {
+        throw new TypeError('Entry file must be a string')
+    }
+    const entries = Object.entries(files)
+    for (const [sourcePath, source] of entries) {
+        if (typeof source !== 'string') {
+            throw new TypeError(`Source content must be a string: ${sourcePath}`)
+        }
+    }
+    initializeRISCV()
+    return _makeRiscVFromFiles(
+        entries.map(([sourcePath]) => sourcePath),
+        entries.map(([, source]) => source),
+        entryFile,
+    ) as JsRiscV
 }
 
 /**

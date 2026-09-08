@@ -1,7 +1,6 @@
 package app.specy.rars.api;
 
 import app.specy.rars.*;
-import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.hardware.*;
 import app.specy.rars.simulator.ProgramArgumentList;
@@ -9,6 +8,7 @@ import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * <p>
@@ -69,38 +69,8 @@ public class Program {
      * @throws AssemblyException thrown if any errors are found in the code
      */
     public ErrorList assemble(String main, RISCVFileSystem files) throws AssemblyException {
-        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(main, files, null);
-        return assemble(programs);
-    }
-
-    /**
-     * Assembles a single file
-     *
-     * @param file path to the file to assemble
-     * @return A list of warnings generated if Options.warningsAreErrors is true, this will be empty
-     * @throws AssemblyException thrown if any errors are found in the code
-     */
-    public ErrorList assemble(RISCVFile file) throws AssemblyException {
-        // TODO: potentially inline prepareForAssembly
-        RISCVFileSystem fs = new MemoryFileSystem();
-        fs.create(file);
-        ArrayList<RISCVprogram> programs = code.prepareFilesForAssembly(file.getName(), fs, null);
-        return assemble(programs);
-    }
-
-    /**
-     * Assembles a string as RISC-V source code
-     *
-     * @param source the code to assemble
-     * @return A list of warnings generated if Options.warningsAreErrors is true, this will be empty
-     * @throws AssemblyException thrown if any errors are found in the code
-     */
-    public ErrorList assembleString(String source) throws AssemblyException {
-        ArrayList<RISCVprogram> programs = new ArrayList<>();
-        code.fromString(source);
-        code.tokenize();
-        programs.add(code);
-        return assemble(programs);
+        code.prepareForAssembly(main, files);
+        return assemble(new ArrayList<>(List.of(code)));
     }
 
     private ErrorList assemble(ArrayList<RISCVprogram> programs) throws AssemblyException {

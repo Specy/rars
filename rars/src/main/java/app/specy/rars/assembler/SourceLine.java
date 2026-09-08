@@ -39,7 +39,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * to the user.
  */
 public class SourceLine {
-    private String source;
+    private String originalSource;
+    private String processedSource;
     private String filename;
     private RISCVprogram program;
     private int lineNumber;
@@ -52,7 +53,12 @@ public class SourceLine {
      * @param lineNumber The line number within that program where source appears.
      */
     public SourceLine(String source, RISCVprogram program, int lineNumber) {
-        this.source = source;
+        this(source, source, program, lineNumber);
+    }
+
+    public SourceLine(String originalSource, String processedSource, RISCVprogram program, int lineNumber) {
+        this.originalSource = originalSource;
+        this.processedSource = processedSource;
         this.program = program;
         if (program != null)
             this.filename = program.getFilename();
@@ -65,7 +71,19 @@ public class SourceLine {
      * @return Source statement as String
      */
     public String getSource() {
-        return source;
+        return processedSource;
+    }
+
+    public String getOriginalSource() {
+        return originalSource;
+    }
+
+    public String getProcessedSource() {
+        return processedSource;
+    }
+
+    public SourceLine withProcessedSource(String source) {
+        return new SourceLine(originalSource, source, program, lineNumber);
     }
 
     /**
@@ -75,6 +93,10 @@ public class SourceLine {
      */
 
     public String getFilename() {
+        return filename;
+    }
+
+    public String getSourcePath() {
         return filename;
     }
 

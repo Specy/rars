@@ -55,7 +55,7 @@ public class MacroPool {
      */
     private Macro current;
     private ArrayList<Integer> callStack;
-    private ArrayList<Integer> callStackOrigLines;
+    private ArrayList<SourceLocation> callStackLocations;
     /**
      * @see #getNextCounter()
      */
@@ -71,7 +71,7 @@ public class MacroPool {
         this.program = program;
         macroList = new ArrayList<>();
         callStack = new ArrayList<>();
-        callStackOrigLines = new ArrayList<>();
+        callStackLocations = new ArrayList<>();
         current = null;
         counter = 0;
     }
@@ -176,23 +176,29 @@ public class MacroPool {
         if (callStack.contains(sourceLine))
             return true;
         callStack.add(sourceLine);
-        callStackOrigLines.add(origSourceLine);
+        RISCVprogram originalProgram = token.getOriginalProgram();
+        String sourcePath = originalProgram == null ? program.getFilename() : originalProgram.getFilename();
+        callStackLocations.add(new SourceLocation(sourcePath, origSourceLine));
         return false;
     }
 
     public void popFromCallStack() {
         callStack.remove(callStack.size() - 1);
-        callStackOrigLines.remove(callStackOrigLines.size() - 1);
+        callStackLocations.remove(callStackLocations.size() - 1);
     }
 
 
     public String getExpansionHistory() {
         String ret = "";
-        for (int i = 0; i < callStackOrigLines.size(); i++) {
+        for (int i = 0; i < callStackLocations.size(); i++) {
             if (i > 0)
                 ret += "->";
-            ret += callStackOrigLines.get(i).toString();
+            ret += callStackLocations.get(i).toString();
         }
         return ret;
+    }
+
+    public ArrayList<SourceLocation> getExpansionTrace() {
+        return new ArrayList<>(callStackLocations);
     }
 }

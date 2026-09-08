@@ -9,6 +9,7 @@ import org.teavm.jso.JSProperty;
 public class JsProgramStatement {
 
     private int sourceLine;
+    private String sourcePath;
     private int address;
     private int binaryStatement;
     private String source;
@@ -18,6 +19,7 @@ public class JsProgramStatement {
 
     public JsProgramStatement(ProgramStatement programStatement) {
         this.sourceLine = programStatement.getSourceLine();
+        this.sourcePath = programStatement.getSourcePath();
         this.address = programStatement.getAddress();
         this.binaryStatement = programStatement.getBinaryStatement();
         this.source = programStatement.getSource();
@@ -30,6 +32,12 @@ public class JsProgramStatement {
     @JSProperty
     public int getSourceLine() {
         return sourceLine;
+    }
+
+    @JSExport
+    @JSProperty
+    public String getSourcePath() {
+        return sourcePath;
     }
 
     @JSExport

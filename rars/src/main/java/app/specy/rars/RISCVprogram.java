@@ -102,6 +102,13 @@ public class RISCVprogram {
         return this.sourceLineList;
     }
 
+    public SourceLine getSourceLineInfo(int expandedLineNumber) {
+        if (sourceLineList == null || expandedLineNumber < 1 || expandedLineNumber > sourceLineList.size()) {
+            return null;
+        }
+        return sourceLineList.get(expandedLineNumber - 1);
+    }
+
     /**
      * Produces name of associated source code file.
      *
@@ -216,16 +223,6 @@ public class RISCVprogram {
 
 
     /**
-     * Reads RISCV source code from a string into structure.
-     *
-     * @param source String containing the RISCV source code.
-     **/
-    public void fromString(String source){
-        this.filename = source;
-        this.sourceList = new ArrayList<>(Arrays.asList(source.split( "\n")));
-    }
-
-    /**
      * Reads RISCV source code from file into structure.  Will always read from file.
      * It is GUI responsibility to assure that source edits are written to file
      * when user selects compile or run/step options.
@@ -236,7 +233,7 @@ public class RISCVprogram {
 
     public void readSource(String file, String source) throws AssemblyException {
         this.filename = file;
-        this.sourceList = new ArrayList(Arrays.asList(source.split("\n")));
+        this.sourceList = new ArrayList<>(Arrays.asList(source.split("\n", -1)));
     }
 
     /**
@@ -251,42 +248,10 @@ public class RISCVprogram {
         this.localSymbolTable = new SymbolTable(this.filename); // prepare for assembly
     }
 
-    /**
-     * Prepares the given list of files for assembly.  This involves
-     * reading and tokenizing all the source files.  There may be only one.
-     *
-     * @param files        ArrayList containing the source file name(s) in no particular order
-     * @param main     String containing name of source file that needs to go first and
-     *                         will be represented by "this" RISCVprogram object.
-     * @param exceptionHandler String containing name of source file containing exception
-     *                         handler.  This will be assembled first, even ahead of leadFilename, to allow it to
-     *                         include "startup" instructions loaded beginning at 0x00400000.  Specify null or
-     *                         empty String to indicate there is no such designated exception handler.
-     * @return ArrayList containing one RISCVprogram object for each file to assemble.
-     * objects for any additional files (send ArrayList to assembler)
-     * @throws AssemblyException Will throw exception if errors occurred while reading or tokenizing.
-     **/
-
-    public ArrayList<RISCVprogram> prepareFilesForAssembly(String main, RISCVFileSystem files, RISCVFile exceptionHandler) throws AssemblyException {
-        ArrayList<RISCVprogram> programsToAssemble = new ArrayList<>();
-        List<RISCVFile> filesList = files.getFiles();
-        int leadFilePosition = 0;
-        if (exceptionHandler != null) {
-            filesList.add(0, exceptionHandler);
-            leadFilePosition = 1;
-        }
-        for (RISCVFile file : filesList) {
-            RISCVprogram preparee = (file.getName().equals(main)) ? this : new RISCVprogram();
-            preparee.readSource(file.getName(), file.getSource());
-            preparee.tokenize(files);
-            // I want "this" RISCVprogram to be the first in the list...except for exception handler
-            if (preparee == this && !programsToAssemble.isEmpty()) {
-                programsToAssemble.add(leadFilePosition, preparee);
-            } else {
-                programsToAssemble.add(preparee);
-            }
-        }
-        return programsToAssemble;
+    /** Reads the entry file and tokenizes its transitive include expansion. */
+    public void prepareForAssembly(String entryFile, RISCVFileSystem files) throws AssemblyException {
+        readSource(entryFile, files.read(entryFile));
+        tokenize(files);
     }
 
     /**

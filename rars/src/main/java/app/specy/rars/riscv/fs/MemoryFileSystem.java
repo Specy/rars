@@ -2,12 +2,12 @@ package app.specy.rars.riscv.fs;
 
 import app.specy.rars.RISCVFile;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class MemoryFileSystem extends RISCVFileSystem {
-    private Map<String, String> files = new HashMap<String, String>();
+    private final Map<String, String> files = new LinkedHashMap<String, String>();
 
     public String read(String path) {
         String f = files.get(path);

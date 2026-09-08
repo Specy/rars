@@ -1,6 +1,7 @@
 package app.specy.rars;
 
 import app.specy.rars.assembler.SymbolTable;
+import app.specy.rars.assembler.SourceLocation;
 import app.specy.rars.assembler.Token;
 import app.specy.rars.assembler.TokenList;
 import app.specy.rars.assembler.TokenTypes;
@@ -14,6 +15,7 @@ import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.util.Binary;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /*
 Copyright (c) 2003-2013,  Pete Sanderson and Kenneth Vollmar
@@ -63,6 +65,8 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
     private Instruction instruction;
     private int textAddress;
     private int sourceLine;
+    private String sourcePath;
+    private List<SourceLocation> macroExpansionTrace;
     private int binaryStatement;
     private boolean altered;
     private static final String invalidOperator = "<INVALID>";
@@ -83,6 +87,13 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
      **/
     public ProgramStatement(RISCVprogram sourceProgram, String source, TokenList origTokenList, TokenList strippedTokenList,
                             Instruction inst, int textAddress, int sourceLine) {
+        this(sourceProgram, source, origTokenList, strippedTokenList, inst, textAddress,
+                sourceProgram == null ? "" : sourceProgram.getFilename(), sourceLine, List.of());
+    }
+
+    public ProgramStatement(RISCVprogram sourceProgram, String source, TokenList origTokenList,
+                            TokenList strippedTokenList, Instruction inst, int textAddress,
+                            String sourcePath, int sourceLine, List<SourceLocation> macroExpansionTrace) {
         this.sourceProgram = sourceProgram;
         this.source = source;
         this.originalTokenList = origTokenList;
@@ -91,7 +102,9 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
         this.numOperands = 0;
         this.instruction = inst;
         this.textAddress = textAddress;
+        this.sourcePath = sourcePath == null ? "" : sourcePath;
         this.sourceLine = sourceLine;
+        this.macroExpansionTrace = new ArrayList<>(macroExpansionTrace);
         this.basicAssemblyStatement = null;
         this.basicStatementList = new BasicStatementList();
         this.machineStatement = null;
@@ -115,6 +128,9 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
      **/
     public ProgramStatement(int binaryStatement, int textAddress) {
         this.sourceProgram = null;
+        this.sourcePath = "";
+        this.sourceLine = 0;
+        this.macroExpansionTrace = new ArrayList<>();
         this.binaryStatement = binaryStatement;
         this.textAddress = textAddress;
         this.originalTokenList = this.strippedTokenList = null;
@@ -190,7 +206,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                     registerNumber = RegisterFile.getRegister(tokenValue).getNumber();
                 } catch (Exception e) {
                     // should never happen; should be caught before now...
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(), "invalid register name"));
+                    errors.add(new ErrorMessage(this, token.getStartPos(), "invalid register name"));
                     return;
                 }
                 this.operands[this.numOperands++] = registerNumber;
@@ -201,7 +217,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                 basicStatementList.addString(basicStatementElement);
                 if (registerNumber < 0) {
                     // should never happen; should be caught before now...
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(), "invalid register name"));
+                    errors.add(new ErrorMessage(this, token.getStartPos(), "invalid register name"));
                     return;
                 }
                 this.operands[this.numOperands++] = registerNumber;
@@ -217,7 +233,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                 }
                 if (registerNumber < 0) {
                     // should never happen; should be caught before now...
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(), "invalid CSR name"));
+                    errors.add(new ErrorMessage(this, token.getStartPos(), "invalid CSR name"));
                     return;
                 }
                 basic += registerNumber;
@@ -230,7 +246,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                 basicStatementList.addString(basicStatementElement);
                 if (registerNumber < 0) {
                     // should never happen; should be caught before now...
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(), "invalid FPU register name"));
+                    errors.add(new ErrorMessage(this, token.getStartPos(), "invalid FPU register name"));
                     return;
                 }
                 this.operands[this.numOperands++] = registerNumber;
@@ -250,7 +266,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                     rounding_mode = 7;
                 }
                 if (rounding_mode == -1){
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(), "invalid rounding mode"));
+                    errors.add(new ErrorMessage(this, token.getStartPos(), "invalid rounding mode"));
                     return;
                 }
                 basic += tokenValue;
@@ -260,7 +276,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
 
                 int address = this.sourceProgram.getLocalSymbolTable().getAddressLocalOrGlobal(tokenValue);
                 if (address == SymbolTable.NOT_FOUND) { // symbol used without being defined
-                    errors.add(new ErrorMessage(this.sourceProgram, token.getSourceLine(), token.getStartPos(),
+                    errors.add(new ErrorMessage(this, token.getStartPos(),
                             "Symbol \"" + tokenValue + "\" not found in symbol table."));
                     return;
                 }
@@ -272,7 +288,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                         address -= this.textAddress;
                         if (address >= (1 << 12) || address < -(1 << 12)) {
                             // SPIM flags as warning, I'll flag as error b/c RARS text segment not long enough for it to be OK.
-                            errors.add(new ErrorMessage(this.sourceProgram, this.sourceLine, 0,
+                            errors.add(new ErrorMessage(this, 0,
                                     "Branch target word address beyond 12-bit range"));
                             return;
                         }
@@ -280,7 +296,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
                     } else if (format == BasicInstructionFormat.J_FORMAT) {
                         address -= this.textAddress;
                         if (address >= (1 << 20) || address < -(1 << 20)) {
-                            errors.add(new ErrorMessage(this.sourceProgram, this.sourceLine, 0,
+                            errors.add(new ErrorMessage(this, 0,
                                     "Jump target word address beyond 20-bit range"));
                             return;
                         }
@@ -383,7 +399,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
             // This means the pseudo-instruction expansion generated another
             // pseudo-instruction (expansion must be to all basic instructions).
             // This is an error on the part of the pseudo-instruction author.
-            errors.add(new ErrorMessage(this.sourceProgram, this.sourceLine, 0,
+            errors.add(new ErrorMessage(this, 0,
                     "INTERNAL ERROR: pseudo-instruction expansion contained a pseudo-instruction"));
             return;
         }
@@ -532,7 +548,11 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
      * @return The file name.
      **/
     public String getSourceFile() {
-        return (sourceProgram == null) ? "" : sourceProgram.getFilename();
+        return sourcePath;
+    }
+
+    public String getSourcePath() {
+        return sourcePath;
     }
 
 
@@ -554,6 +574,10 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
 
     public int getSourceLine() {
         return sourceLine;
+    }
+
+    public List<SourceLocation> getMacroExpansionTrace() {
+        return new ArrayList<>(macroExpansionTrace);
     }
 
     /**
@@ -705,7 +729,7 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
         // should NEVER occur
         // if it does, then one of the BasicInstructions is malformed
         if (length == 0) {
-            errors.add(new ErrorMessage(this.sourceProgram, this.sourceLine, 0,
+            errors.add(new ErrorMessage(this, 0,
                     "INTERNAL ERROR: mismatch in number of operands in statement vs mask"));
             return;
         }
