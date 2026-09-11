@@ -150,9 +150,12 @@ public class JsRISCVIO extends RISCVIO {
                 throw new RISCVIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
             }
             JSNumber eof = (JSNumber) array.get(0);
-            JSArray<Byte> buffer = (JSArray<Byte>) array.get(1);
+            // The handler answers with plain JavaScript numbers, which is what its published
+            // type says. Reading them as boxed Java Bytes instead made the unboxing call a
+            // method the numbers do not have, so callers had to hand over fake Byte objects.
+            JSArray<JSNumber> buffer = (JSArray<JSNumber>) array.get(1);
             for(int i = 0; i < buffer.getLength(); i++){
-                destination[i] = buffer.get(i);
+                destination[i] = (byte) buffer.get(i).intValue();
             }
             return eof.intValue();
         }
