@@ -2,7 +2,6 @@ package app.specy.rars;
 
 import app.specy.rars.config.SettingsProperties;
 
-import java.util.HashMap;
 import java.util.Observable;
 
 /*
@@ -216,7 +215,11 @@ public class Settings extends Observable {
 
 
 
-    private HashMap<Bool, Boolean> booleanSettingsValues;
+    // Indexed by Bool.ordinal() rather than held in a HashMap: the simulator reads the
+    // self-modifying code flag on every instruction fetch and every data access, and a map read
+    // there costs a hash lookup and a Boolean unboxing. Every Bool always has a value, because
+    // applyDefaultSettings fills the whole array before anything reads it.
+    private boolean[] booleanSettingsValues;
     private String[] stringSettingsValues;
 
     /**
@@ -226,7 +229,7 @@ public class Settings extends Observable {
      */
 
     public Settings() {
-        booleanSettingsValues = new HashMap<>();
+        booleanSettingsValues = new boolean[Bool.values().length];
         stringSettingsValues = new String[stringSettingsKeys.length];
         initialize();
     }
@@ -266,13 +269,10 @@ public class Settings extends Observable {
      * @throws IllegalArgumentException if identifier is invalid.
      */
     public boolean getBooleanSetting(Bool setting) {
-        // one lookup rather than a containsKey followed by a get: the simulator reads the
-        // self-modifying code and back-stepping flags several times per instruction
-        Boolean value = booleanSettingsValues.get(setting);
-        if (value == null) {
+        if (setting == null) {
             throw new IllegalArgumentException("Invalid boolean setting ID");
         }
-        return value;
+        return booleanSettingsValues[setting.ordinal()];
     }
 
     /**
@@ -303,11 +303,10 @@ public class Settings extends Observable {
      * @throws IllegalArgumentException if identifier is not valid.
      */
     public void setBooleanSetting(Bool setting, boolean value) {
-        if (booleanSettingsValues.containsKey(setting)) {
-            internalSetBooleanSetting(setting, value);
-        } else {
+        if (setting == null) {
             throw new IllegalArgumentException("Invalid boolean setting ID");
         }
+        internalSetBooleanSetting(setting, value);
     }
 
     /**
@@ -318,11 +317,10 @@ public class Settings extends Observable {
      * @param value True to enable the setting, false otherwise.
      */
     public void setBooleanSettingNonPersistent(Bool setting, boolean value) {
-        if (booleanSettingsValues.containsKey(setting)) {
-            booleanSettingsValues.put(setting, value);
-        } else {
+        if (setting == null) {
             throw new IllegalArgumentException("Invalid boolean setting ID");
         }
+        booleanSettingsValues[setting.ordinal()] = value;
     }
 
     /**
@@ -357,7 +355,7 @@ public class Settings extends Observable {
     // Default values.  Will be replaced if available from property file or Preferences object.
     private void applyDefaultSettings() {
         for (Bool setting : Bool.values()) {
-            booleanSettingsValues.put(setting, setting.getDefault());
+            booleanSettingsValues[setting.ordinal()] = setting.getDefault();
         }
         for (int i = 0; i < stringSettingsValues.length; i++) {
             stringSettingsValues[i] = defaultStringSettingsValues[i];
@@ -366,8 +364,8 @@ public class Settings extends Observable {
 
     // Used by all the boolean setting "setter" methods.
     private void internalSetBooleanSetting(Bool setting, boolean value) {
-        if (value != booleanSettingsValues.get(setting)) {
-            booleanSettingsValues.put(setting, value);
+        if (value != booleanSettingsValues[setting.ordinal()]) {
+            booleanSettingsValues[setting.ordinal()] = value;
             setChanged();
             notifyObservers();
         }
@@ -401,7 +399,7 @@ public class Settings extends Observable {
                 if (settingValue != null) {
                     boolean value = Boolean.valueOf(settingValue);
                     setting.setDefault(value);
-                    booleanSettingsValues.put(setting, value);
+                    booleanSettingsValues[setting.ordinal()] = value;
                 }
             }
             for (int i = 0; i < stringSettingsKeys.length; i++) {

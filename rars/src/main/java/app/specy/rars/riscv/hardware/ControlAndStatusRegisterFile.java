@@ -88,6 +88,7 @@ public class ControlAndStatusRegisterFile {
      * @return old value in register prior to update
      **/
     public static boolean updateRegister(int num, long val) {
+        settleCounters();
         if (instance.getRegister(num) instanceof ReadOnlyRegister) {
             return true;
         }
@@ -111,6 +112,7 @@ public class ControlAndStatusRegisterFile {
      * @return old value in register prior to update
      **/
     public static void updateRegister(String name, long val) {
+        settleCounters();
         updateRegister(instance.getRegister(name).getNumber(), val);
     }
 
@@ -126,17 +128,19 @@ public class ControlAndStatusRegisterFile {
     public static final String INSTRET = "instret";
 
     public static void updateRegisterBackdoor(int num, long val) {
+        settleCounters();
         updateRegisterBackdoor(instance.getRegister(num), val);
     }
 
     /**
-     * As above, for a register the caller already holds. The simulator writes the cycle, instret
-     * and time counters on every instruction, so it resolves them once rather than by name.
+     * As above, for a register the caller already holds. The simulator writes the time counter
+     * through here, so it resolves that register once rather than by name.
      *
      * @param register Register to set the value of.
      * @param val      The desired value for the register.
      **/
     public static void updateRegisterBackdoor(Register register, long val) {
+        settleCounters();
         long old = register.setValueBackdoor(val);
         // Writing a register the value it already holds is not a change, and its undo entry would
         // restore that same value, so none is recorded. The time counter reports milliseconds and
@@ -156,6 +160,7 @@ public class ControlAndStatusRegisterFile {
      * @return old value in register prior to update
      **/
     public static void updateRegisterBackdoor(String name, long val) {
+        settleCounters();
         updateRegisterBackdoor(instance.getRegister(name), val);
     }
 
@@ -166,6 +171,7 @@ public class ControlAndStatusRegisterFile {
      * @param val The value to OR with
      **/
     public static boolean orRegister(int num, long val) {
+        settleCounters();
         return updateRegister(num, instance.getValue(num) | val);
     }
 
@@ -176,6 +182,7 @@ public class ControlAndStatusRegisterFile {
      * @param val  The value to OR with
      **/
     public static void orRegister(String name, long val) {
+        settleCounters();
         updateRegister(name, instance.getValue(name) | val);
     }
 
@@ -186,6 +193,7 @@ public class ControlAndStatusRegisterFile {
      * @param val The value to clear by
      **/
     public static boolean clearRegister(int num, long val) {
+        settleCounters();
         return updateRegister(num, instance.getValue(num) & ~val);
     }
 
@@ -196,6 +204,7 @@ public class ControlAndStatusRegisterFile {
      * @param val  The value to clear by
      **/
     public static void clearRegister(String name, long val) {
+        settleCounters();
         updateRegister(name, instance.getValue(name) & ~val);
     }
 
@@ -207,6 +216,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static int getValue(int num) {
+        settleCounters();
         return (int)instance.getValue(num);
     }
 
@@ -218,6 +228,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static long getValueLong(int num) {
+        settleCounters();
         return instance.getValue(num);
     }
     /**
@@ -228,6 +239,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static int getValue(String name) {
+        settleCounters();
         return (int)instance.getValue(name);
     }
 
@@ -239,6 +251,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static long getValueNoNotify(String name) {
+        settleCounters();
         return instance.getRegister(name).getValueNoNotify();
     }
 
@@ -249,6 +262,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static Register[] getRegisters() {
+        settleCounters();
         return instance.getRegisters();
     }
 
@@ -261,6 +275,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static int getRegisterPosition(Register r) {
+        settleCounters();
         Register[] registers = instance.getRegisters();
         for (int i = 0; i < registers.length; i++) {
             if (registers[i] == r) {
@@ -281,22 +296,42 @@ public class ControlAndStatusRegisterFile {
      * the executing instruction only while the instruction did not change the program counter, and
      * these counters are advanced after it has.
      */
-    public static void incrementCounters(Register cycle, Register instret, int pc) {
-        cycle.setValueBackdoor(cycle.getValueNoNotify() + 1);
-        instret.setValueBackdoor(instret.getValueNoNotify() + 1);
-        if (Globals.getSettings().getBackSteppingEnabled()) {
+    public static void incrementCounters(boolean backStepping, int pc) {
+        // Counted rather than added into the two registers here: they hold longs, TeaVM compiles
+        // long arithmetic into BigInt operations that allocate, and two of those per instruction
+        // was about a tenth of simulation. Every accessor on this class settles the count first,
+        // so nothing can read a counter that is behind.
+        pendingCounterTicks++;
+        if (backStepping) {
             Globals.program.getBackStepper().addControlAndStatusCountersDecrement(pc);
         }
     }
 
+    /** Instructions counted by {@link #incrementCounters} but not yet added into the registers. */
+    private static int pendingCounterTicks = 0;
+
+    private static void settleCounters() {
+        if (pendingCounterTicks == 0) return;
+        int ticks = pendingCounterTicks;
+        pendingCounterTicks = 0;
+        Register cycle = instance.getRegister(CYCLE), instret = instance.getRegister(INSTRET);
+        cycle.setValueBackdoor(cycle.getValueNoNotify() + ticks);
+        instret.setValueBackdoor(instret.getValueNoNotify() + ticks);
+    }
+
     /** Undoes one {@link #incrementCounters} step. */
     public static void decrementCounters() {
+        if (pendingCounterTicks > 0) {
+            pendingCounterTicks--;
+            return;
+        }
         Register cycle = instance.getRegister(CYCLE), instret = instance.getRegister(INSTRET);
         cycle.setValueBackdoor(cycle.getValueNoNotify() - 1);
         instret.setValueBackdoor(instret.getValueNoNotify() - 1);
     }
 
     public static Register getRegister(String name) {
+        settleCounters();
         return instance.getRegister(name);
     }
 
@@ -305,6 +340,7 @@ public class ControlAndStatusRegisterFile {
      **/
 
     public static void resetRegisters() {
+        settleCounters();
         instance.resetRegisters();
     }
 

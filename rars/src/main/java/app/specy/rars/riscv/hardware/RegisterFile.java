@@ -67,6 +67,14 @@ public class RegisterFile {
     });
 
     private static Register programCounter = new Register("pc", -1, Memory.textBaseAddress);
+    /*
+     * The program counter is an int in every accessor below, but a Register holds a long, and
+     * TeaVM compiles each long touch into BigInt arithmetic that allocates. The simulator reads
+     * the PC twice and increments it once per instruction, so it is kept here as an int and the
+     * Register - which nothing observes, and which only the host reads - is refreshed when
+     * something asks for the Register itself.
+     */
+    private static int programCounterValue = Memory.textBaseAddress;
 
     /**
      * This method updates the register value who's number is num.  Also handles the lo and hi registers
@@ -166,7 +174,7 @@ public class RegisterFile {
      **/
 
     public static void initializeProgramCounter(int value) {
-        programCounter.setValue((long)value);
+        programCounterValue = value;
     }
 
     /**
@@ -229,8 +237,8 @@ public class RegisterFile {
      **/
 
     public static int setProgramCounter(int value) {
-        int old = (int)programCounter.getValue();
-        programCounter.setValue(value);
+        int old = programCounterValue;
+        programCounterValue = value;
         if (Globals.getSettings().getBackSteppingEnabled()) {
             Globals.program.getBackStepper().addPCRestore(old);
         }
@@ -244,7 +252,7 @@ public class RegisterFile {
      **/
 
     public static int getProgramCounter() {
-        return (int)programCounter.getValue();
+        return programCounterValue;
     }
 
     /**
@@ -253,6 +261,7 @@ public class RegisterFile {
      * @return program counter's Register object.
      */
     public static Register getProgramCounterRegister() {
+        programCounter.setValueBackdoor(programCounterValue);
         return programCounter;
     }
 
@@ -285,7 +294,7 @@ public class RegisterFile {
      **/
 
     public static void incrementPC() {
-        programCounter.setValue(programCounter.getValue() + Instruction.INSTRUCTION_LENGTH);
+        programCounterValue += Instruction.INSTRUCTION_LENGTH;
     }
 
     /**

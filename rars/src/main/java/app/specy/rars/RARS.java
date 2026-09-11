@@ -126,6 +126,7 @@ public class RARS {
         FloatingPointRegisterFile.resetRegisters();
         ControlAndStatusRegisterFile.resetRegisters();
         InterruptController.reset();
+        ReservationTable.reset();
         RegisterFile.initializeProgramCounter(true);
         Globals.exitCode = 0;
 

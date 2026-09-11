@@ -68,6 +68,18 @@ public final class Directives {
     public static final Directives INCLUDE = new Directives(".include", "Insert the contents of the specified file.  Put filename in quotes.");
     public static final Directives SECTION = new Directives(".section", "Allows specifying sections without .text or .data directives. Included for gcc comparability");
 
+    /* Directives below this point exist so that the output of a C compiler assembles. */
+    public static final Directives BSS = new Directives(".bss", "Subsequent items stored in the Data segment, which starts out zeroed. Included for gcc compatibility");
+    public static final Directives SBSS = new Directives(".sbss", "Alias for .bss");
+    public static final Directives ZERO = new Directives(".zero", "Reserve the next specified number of bytes, which read as zero. Alias for .space");
+    public static final Directives COMM = new Directives(".comm", "Reserve the given number of bytes for a global symbol, the way a C compiler declares an uninitialized global variable. Takes a symbol, a size in bytes and an optional alignment");
+    public static final Directives LCOMM = new Directives(".lcomm", "Reserve the given number of bytes for a symbol local to this file, the way a C compiler declares an uninitialized static variable");
+    public static final Directives P2ALIGN = new Directives(".p2align", "Align next data item on a 2^n byte boundary. Alias for .align");
+    public static final Directives BALIGN = new Directives(".balign", "Align next data item on the given byte boundary, written directly rather than as a power of two");
+    public static final Directives TWO_BYTE = new Directives(".2byte", "Alias for .half");
+    public static final Directives FOUR_BYTE = new Directives(".4byte", "Alias for .word");
+    public static final Directives EIGHT_BYTE = new Directives(".8byte", "Alias for .dword");
+
     private String descriptor;
     private String description; // help text
 
@@ -83,6 +95,25 @@ public final class Directives {
      * @param str A String containing candidate directive name (e.g. ".ascii")
      * @return If match is found, returns matching Directives object, else returns <tt>null</tt>.
      **/
+
+    /**
+     * Reduce an alias to the directive it is spelled differently from, so that the
+     * rest of the assembler only ever sees the canonical one. The alias still has
+     * its own entry in the directive list, so it is offered by autocomplete and
+     * carries its own description.
+     *
+     * @param direct a directive, possibly an alias
+     * @return the directive that does the work, or the argument unchanged
+     */
+    public static Directives canonical(Directives direct) {
+        if (direct == TWO_BYTE) return HALF;
+        if (direct == FOUR_BYTE) return WORD;
+        if (direct == EIGHT_BYTE) return DWORD;
+        if (direct == P2ALIGN) return ALIGN;
+        if (direct == ZERO) return SPACE;
+        if (direct == SBSS) return BSS;
+        return direct;
+    }
 
     public static Directives matchDirective(String str) {
         for (Directives match : directiveList) {

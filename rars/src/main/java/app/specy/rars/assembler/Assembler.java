@@ -449,9 +449,11 @@ public class Assembler {
         // so this will catch anything, including a misspelling of a valid directive (which is
         // a nice thing to do).
         if (tokenType == TokenTypes.IDENTIFIER && token.getValue().charAt(0) == '.') {
-            errors.add(new ErrorMessage(ErrorMessage.WARNING, token.getSourceProgram(), token
-                    .getSourceLine(), token.getStartPos(), "RARS does not recognize the "
-                    + token.getValue() + " directive.  Ignored."));
+            if (!isMetadataDirective(token.getValue())) {
+                errors.add(new ErrorMessage(ErrorMessage.WARNING, token.getSourceProgram(), token
+                        .getSourceLine(), token.getStartPos(), "RARS does not recognize the "
+                        + token.getValue() + " directive.  Ignored."));
+            }
             return null;
         }
 
@@ -577,7 +579,7 @@ public class Assembler {
     // This source code line is a directive, not a instruction. Let's carry it out.
     private void executeDirective(TokenList tokens) {
         Token token = tokens.get(0);
-        Directives direct = Directives.matchDirective(token.getValue());
+        Directives direct = Directives.canonical(Directives.matchDirective(token.getValue()));
         if (Globals.debug)
             System.out.println("line " + token.getSourceLine() + " is directive " + direct);
         if (direct == null) {
@@ -636,7 +638,8 @@ public class Assembler {
         } else if (inMacroSegment) {
             // should not parse lines even directives in macro segment
             return;
-        } else if (direct == Directives.DATA) {
+        } else if (direct == Directives.DATA || direct == Directives.BSS) {
+            // .bss is .data here, because the data segment already reads as zero
             this.inDataSegment = true;
             this.autoAlign = true;
             if (tokens.size() > 1 && TokenTypes.isIntegerTokenType(tokens.get(1).getType())) {
@@ -652,10 +655,13 @@ public class Assembler {
                 Token section = tokens.get(1);
                 if(section.getType() == TokenTypes.QUOTED_STRING || section.getType() == TokenTypes.IDENTIFIER){
                     String str = section.getValue();
-                    if(str.startsWith(".data") || str.startsWith(".rodata") || str.startsWith(".sdata")){
+                    if(str.startsWith(".data") || str.startsWith(".rodata") || str.startsWith(".sdata")
+                            || str.startsWith(".bss") || str.startsWith(".sbss")){
                         this.inDataSegment = true;
                     }else if(str.startsWith(".text")){
                         this.inDataSegment = false;
+                    }else if(str.startsWith(".note")){
+                        // a note section holds no program data, so there is nothing to place
                     }else{
                         errors.add(new ErrorMessage(true,token.getSourceProgram(),token.getSourceLine(),token.getStartPos(),
                                 "section name \""+str+"\" is ignored"));
@@ -697,13 +703,65 @@ public class Assembler {
             }
             int value = Binary.stringToInt(tokens.get(1).getValue()); // KENV 1/6/05
             if(value < 2 && !this.inDataSegment) {
-                errors.add(new ErrorMessage(true,token.getSourceProgram(),token.getSourceLine(),token.getStartPos(),
-                        "Alignments less than 4 bytes are not supported in the text section. The alignment has been rounded up to 4 bytes."));
+                // instructions are always on a word boundary here, so asking for less is
+                // already satisfied and saying so every time would only be noise
                 this.dataAddress.set(this.alignToBoundary(this.dataAddress.get(),4));
             } else if (value == 0) {
                 this.autoAlign = false;
             } else {
                 this.dataAddress.set(this.alignToBoundary(this.dataAddress.get(),(int)Math.pow(2,value)));
+            }
+        } else if (direct == Directives.BALIGN) {
+            if (tokens.size() != 2) {
+                errors.add(new ErrorMessage(token.getSourceProgram(),
+                        token.getSourceLine(), token.getStartPos(), "\"" + token.getValue()
+                        + "\" requires one operand"));
+                return;
+            }
+            if (!TokenTypes.isIntegerTokenType(tokens.get(1).getType())
+                    || Binary.stringToInt(tokens.get(1).getValue()) <= 0) {
+                errors.add(new ErrorMessage(token.getSourceProgram(),
+                        token.getSourceLine(), token.getStartPos(), "\"" + token.getValue()
+                        + "\" requires a positive integer"));
+                return;
+            }
+            this.dataAddress.set(this.alignToBoundary(this.dataAddress.get(),
+                    Binary.stringToInt(tokens.get(1).getValue())));
+        } else if (direct == Directives.COMM || direct == Directives.LCOMM) {
+            // A C compiler emits these for a variable it never initializes. The bytes
+            // come out of the data segment whichever section is current, and the current
+            // section is left alone, which is what the GNU assembler does.
+            if (tokens.size() < 3 || tokens.size() > 4) {
+                errors.add(new ErrorMessage(token.getSourceProgram(), token.getSourceLine(),
+                        token.getStartPos(), "\"" + token.getValue()
+                        + "\" requires a symbol and a size in bytes, and takes an optional alignment"));
+                return;
+            }
+            if (!TokenTypes.isIntegerTokenType(tokens.get(2).getType())
+                    || Binary.stringToInt(tokens.get(2).getValue()) < 0) {
+                errors.add(new ErrorMessage(token.getSourceProgram(), token.getSourceLine(),
+                        token.getStartPos(), "\"" + token.getValue()
+                        + "\" requires a non-negative integer size"));
+                return;
+            }
+            int alignment = DataTypes.WORD_SIZE;
+            if (tokens.size() == 4) {
+                if (!TokenTypes.isIntegerTokenType(tokens.get(3).getType())
+                        || Binary.stringToInt(tokens.get(3).getValue()) <= 0) {
+                    errors.add(new ErrorMessage(token.getSourceProgram(), token.getSourceLine(),
+                            token.getStartPos(), "\"" + token.getValue()
+                            + "\" requires a positive integer alignment"));
+                    return;
+                }
+                alignment = Binary.stringToInt(tokens.get(3).getValue());
+            }
+            this.dataAddress.set(this.alignToBoundary(this.dataAddress.get(), alignment));
+            fileCurrentlyBeingAssembled.getLocalSymbolTable().addSymbol(tokens.get(1),
+                    this.dataAddress.get(), true, this.errors);
+            this.dataAddress.increment(Binary.stringToInt(tokens.get(2).getValue()));
+            if (direct == Directives.COMM) {
+                // .comm is visible to other files, which is what .globl already arranges
+                globalDeclarationList.add(tokens.get(1));
             }
         } else if (direct == Directives.SPACE) {
             // TODO: add a fill type option
@@ -1225,6 +1283,31 @@ public class Assembler {
     // which is next higher multiple of the byte boundary. Used for aligning data segment.
     // For instance if args are 6 and 4, returns 8 (next multiple of 4 higher than 6).
     // NOTE: it will fix any symbol table entries for this address too. See else part.
+    /**
+     * Directives a C compiler emits for the linker and the debugger. None of them
+     * contributes anything to the program image, so ignoring one is the correct
+     * outcome rather than a compromise, and warning about it would only bury the
+     * warnings that do mean something.
+     */
+    private static final String[] METADATA_DIRECTIVES = {
+            ".file", ".ident", ".version", ".option", ".attribute", ".size", ".type",
+            ".local", ".weak", ".hidden", ".protected", ".internal", ".addrsig", ".addrsig_sym",
+    };
+
+    private static boolean isMetadataDirective(String name) {
+        String lower = name.toLowerCase();
+        // call frame information, which runs to one directive per row of the unwind table
+        if (lower.startsWith(".cfi_")) {
+            return true;
+        }
+        for (String metadata : METADATA_DIRECTIVES) {
+            if (lower.equals(metadata)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private int alignToBoundary(int address, int byteBoundary) {
         int remainder = address % byteBoundary;
         if (remainder == 0) {

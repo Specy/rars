@@ -332,17 +332,19 @@ public class Simulator extends Observable {
         private static final int TIME_SAMPLE_INSTRUCTIONS = 64;
 
         public void run() {
-            // the three counters written on every instruction, resolved once instead of by name
-            final Register cycleRegister = ControlAndStatusRegisterFile.getRegister(
-                    ControlAndStatusRegisterFile.CYCLE);
-            final Register instretRegister = ControlAndStatusRegisterFile.getRegister(
-                    ControlAndStatusRegisterFile.INSTRET);
+            // the time counter, resolved once instead of by name on every sample; cycle and
+            // instret are counted inside ControlAndStatusRegisterFile rather than written here
             final Register timeRegister = ControlAndStatusRegisterFile.getRegister("time");
             // and the three interrupt state counters read on every instruction
             final Register uipRegister = ControlAndStatusRegisterFile.getRegister("uip");
             final Register uieRegister = ControlAndStatusRegisterFile.getRegister("uie");
             final Register ustatusRegister = ControlAndStatusRegisterFile.getRegister("ustatus");
             int timeSampleCountdown = 1;
+            // Backstepping cannot be switched on or off while a run is in flight, so the flag is
+            // resolved once rather than walked down from Globals to the program's BackStepper on
+            // every instruction.
+            final boolean backStepping = Globals.getSettings().getBackSteppingEnabled();
+            final BackStepper backStepper = backStepping ? Globals.program.getBackStepper() : null;
 
             if (breakPoints == null || breakPoints.length == 0) {
                 breakPoints = null;
@@ -484,18 +486,18 @@ public class Simulator extends Observable {
                         instruction.simulate(statement);
 
                         // IF statement added 7/26/06 (explanation above)
-                        if (Globals.getSettings().getBackSteppingEnabled()) {
-                            Globals.program.getBackStepper().addDoNothing(pc);
+                        if (backStepping) {
+                            backStepper.addDoNothing(pc);
                         }
                     } catch (BreakpointException b) {
                         // EBREAK needs backstepping support too.
-                        if (Globals.getSettings().getBackSteppingEnabled()) {
-                            Globals.program.getBackStepper().addDoNothing(pc);
+                        if (backStepping) {
+                            backStepper.addDoNothing(pc);
                         }
                         ebreak = true;
                     } catch (WaitException w) {
-                        if (Globals.getSettings().getBackSteppingEnabled()) {
-                            Globals.program.getBackStepper().addDoNothing(pc);
+                        if (backStepping) {
+                            backStepper.addDoNothing(pc);
                         }
                         waiting = true;
                     } catch (ExitingException e) {
@@ -523,7 +525,7 @@ public class Simulator extends Observable {
 
                 // Update cycle(h) and instret(h). One undo entry covers both, which is also what
                 // keeps the shipped undo history covering as many instructions as it says.
-                ControlAndStatusRegisterFile.incrementCounters(cycleRegister, instretRegister, pc);
+                ControlAndStatusRegisterFile.incrementCounters(backStepping, pc);
                 // The time counter reports milliseconds, and reading the host clock allocates both
                 // a date and a boxed long, so it is sampled rather than read on every instruction.
                 // A sample this often is still far finer than the millisecond it reports.

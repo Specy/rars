@@ -453,6 +453,54 @@ public class InstructionSet {
         instructionList.add(new XOR());
         instructionList.add(new XORI());
 
+        // A extension: atomics
+        instructionList.add(new AMOADDW());
+        instructionList.add(new AMOANDW());
+        instructionList.add(new AMOMAXW());
+        instructionList.add(new AMOMAXUW());
+        instructionList.add(new AMOMINW());
+        instructionList.add(new AMOMINUW());
+        instructionList.add(new AMOORW());
+        instructionList.add(new AMOSWAPW());
+        instructionList.add(new AMOXORW());
+        instructionList.add(new LRW());
+        instructionList.add(new SCW());
+
+        // Zbb extension: basic bit manipulation
+        instructionList.add(new ANDN());
+        instructionList.add(new CLZ());
+        instructionList.add(new CPOP());
+        instructionList.add(new CTZ());
+        instructionList.add(new MAX());
+        instructionList.add(new MAXU());
+        instructionList.add(new MIN());
+        instructionList.add(new MINU());
+        instructionList.add(new ORCB());
+        instructionList.add(new ORN());
+        instructionList.add(new REV8());
+        instructionList.add(new ROL());
+        instructionList.add(new ROR());
+        instructionList.add(new RORI());
+        instructionList.add(new SEXTB());
+        instructionList.add(new SEXTH());
+        instructionList.add(new XNOR());
+        instructionList.add(new ZEXTH());
+
+        // Zba extension: address generation
+        instructionList.add(new SH1ADD());
+        instructionList.add(new SH2ADD());
+        instructionList.add(new SH3ADD());
+
+        // Zbs extension: single bit manipulation
+        instructionList.add(new BCLR());
+        instructionList.add(new BCLRI());
+        instructionList.add(new BEXT());
+        instructionList.add(new BEXTI());
+        instructionList.add(new BINV());
+        instructionList.add(new BINVI());
+        instructionList.add(new BSET());
+        instructionList.add(new BSETI());
+
         if (InstructionSet.rv64) {
             instructionList.add(new ADDW());
             instructionList.add(new ADDIW());
@@ -487,6 +535,34 @@ public class InstructionSet {
             instructionList.add(new SRAI64());
             instructionList.add(new SLLI64());
             instructionList.add(new SRLI64());
+
+            // A extension: 64 bit atomics
+            instructionList.add(new AMOADDD());
+            instructionList.add(new AMOANDD());
+            instructionList.add(new AMOMAXD());
+            instructionList.add(new AMOMAXUD());
+            instructionList.add(new AMOMIND());
+            instructionList.add(new AMOMINUD());
+            instructionList.add(new AMOORD());
+            instructionList.add(new AMOSWAPD());
+            instructionList.add(new AMOXORD());
+            instructionList.add(new LRD());
+            instructionList.add(new SCD());
+
+            // Zbb extension: 64 bit bit manipulation
+            instructionList.add(new CLZW());
+            instructionList.add(new CPOPW());
+            instructionList.add(new CTZW());
+            instructionList.add(new ROLW());
+            instructionList.add(new RORIW());
+            instructionList.add(new RORW());
+
+            // Zba extension: 64 bit address generation
+            instructionList.add(new ADDUW());
+            instructionList.add(new SH1ADDUW());
+            instructionList.add(new SH2ADDUW());
+            instructionList.add(new SH3ADDUW());
+            instructionList.add(new SLLIUW());
         }
 
 
