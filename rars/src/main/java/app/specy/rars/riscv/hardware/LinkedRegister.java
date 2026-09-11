@@ -54,23 +54,23 @@ public class LinkedRegister extends Register {
         }
     }
 
-    public synchronized long getValue() {
+    public long getValue() {
         super.getValue(); // to notify observers
         return getValueNoNotify();
     }
 
-    public synchronized long getValueNoNotify() {
+    public long getValueNoNotify() {
         return (base.getValueNoNotify() & mask) >>> shift;
     }
 
-    public synchronized long setValue(long val) {
+    public long setValue(long val) {
         long old = base.getValueNoNotify();
         base.setValue(((val << shift) & mask) | (old & ~mask));
         super.setValue(0); //value doesn't matter just notify
         return (old & mask) >>> shift;
     }
 
-    public synchronized void resetValue() {
+    public void resetValue() {
         base.resetValue(); // not completely correct, but registers are only reset all together, so it doesn't matter that the other subsets are reset too
     }
 }

@@ -5,7 +5,9 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.Settings;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -54,12 +56,17 @@ public class BackStepper {
         CONTROL_AND_STATUS_REGISTER_RESTORE,
         CONTROL_AND_STATUS_REGISTER_BACKDOOR,
         FLOATING_POINT_REGISTER_RESTORE,
-        DO_NOTHING
+        DO_NOTHING,
+        CONTROL_AND_STATUS_COUNTERS_DECREMENT
     }
 
     // Flag to mark BackStep object as prepresenting specific situation: user manipulates
     // memory/register value via GUI after assembling program but before running it.
     private static final int NOT_PC_VALUE = -1;
+
+    // Memo for the statement lookup every push makes; see BackStep.assign.
+    private int lastStatementPc = NOT_PC_VALUE;
+    private ProgramStatement lastStatement;
 
 
     private boolean engaged;
@@ -170,6 +177,9 @@ public class BackStepper {
                             break;
                         case PC_RESTORE:
                             RegisterFile.setProgramCounter(step.param1);
+                            break;
+                        case CONTROL_AND_STATUS_COUNTERS_DECREMENT:
+                            ControlAndStatusRegisterFile.decrementCounters();
                             break;
                         case DO_NOTHING:
                             break;
@@ -309,6 +319,32 @@ public class BackStepper {
     }
 
     /**
+     * Add a new "back step" (the undo action) to the stack.  The action here is to undo one
+     * instruction's worth of the cycle and instret counters.
+     *
+     * The entry carries no values because it does not need them. Both counters are
+     * {@link app.specy.rars.riscv.hardware.ReadOnlyRegister}s, which
+     * {@code ControlAndStatusRegisterFile.updateRegister} refuses to write, so no program can
+     * assign them; the only code that writes them is the simulator loop, and it only ever adds one
+     * to each, once per instruction. Undoing that is a subtraction, so one entry replaces the two
+     * this used to push. A backStep that pops several iterations of a self-branching instruction at
+     * once is still exact, because each iteration left its own entry and so its own subtraction.
+     *
+     * `RISCVEmulator.test.ts` holds that invariant: if the counters ever gain a second writer, or
+     * stop moving in step with the instruction count, those tests fail rather than undo silently
+     * restoring the wrong values.
+     *
+     * @param programCounter The address of the instruction that was counted. This is passed in
+     *                       rather than read from `pc()`, which subtracts one instruction from the
+     *                       program counter and so names the wrong address once the instruction has
+     *                       branched: a jump back to the entry point made it name the word below
+     *                       the text segment, leaving the entry with no statement to group under.
+     */
+    public void addControlAndStatusCountersDecrement(int programCounter) {
+        backSteps.push(Action.CONTROL_AND_STATUS_COUNTERS_DECREMENT, programCounter);
+    }
+
+    /**
      * Add a new "back step" (the undo action) to the stack.  The action here
      * is to restore a floating point register value.
      *
@@ -348,20 +384,43 @@ public class BackStepper {
         private void assign(Action act, int programCounter, int parm1, long parm2) {
             action = act;
             pc = programCounter;
-            try {
-                // Client does not have direct access to program statement, and rather than making all
-                // of them go through the methods below to obtain it, we will do it here.
-                // Want the program statement but do not want observers notified.
-                ps = Globals.memory.getStatementNoNotify(programCounter);
-            } catch (Exception e) {
-                // The only situation causing this so far: user modifies memory or register
-                // contents through direct manipulation on the GUI, after assembling the program but
-                // before starting to run it (or after backstepping all the way to the start).
+            // Client does not have direct access to program statement, and rather than making all
+            // of them go through the methods below to obtain it, we will do it here.
+            // Want the program statement but do not want observers notified.
+            //
+            // The lookup is guarded rather than wrapped in a bare catch: `pc()` is the program
+            // counter minus one instruction, so a branch taken to the first instruction of the text
+            // segment asks for the word below it, and every push on such a step used to build and
+            // throw an AddressErrorException. Filling in that exception's stack trace and its
+            // formatted message dominated simulation of any loop whose target is the entry point.
+            //
+            // The result is memoised on the program counter it was read for, because an instruction
+            // pushes more than one entry and every one of them asks for the same statement. Only
+            // the grouping in `backStep` reads `ps`, so a program that rewrote the instruction at
+            // this address between two pushes would change how its undo entries group, not what any
+            // of them restores.
+            ProgramStatement statement;
+            if (programCounter == lastStatementPc) {
+                statement = lastStatement;
+            } else {
+                statement = null;
+                if (Memory.wordAligned(programCounter) && (Memory.inTextSegment(programCounter)
+                        || Globals.getSettings().getBooleanSetting(Settings.Bool.SELF_MODIFYING_CODE_ENABLED))) {
+                    try {
+                        statement = Globals.memory.getStatementNoNotify(programCounter);
+                    } catch (Exception e) {
+                        statement = null;
+                    }
+                }
+                lastStatementPc = programCounter;
+                lastStatement = statement;
+            }
+            if (statement == null) {
                 // The action will not be associated with any instruction, but will be carried out
                 // when popped.
-                ps = null;
                 pc = NOT_PC_VALUE; // Backstep method above will see this as flag to not set PC
             }
+            ps = statement;
             param1 = parm1;
             param2 = parm2;
          /*				
@@ -393,8 +452,10 @@ public class BackStepper {
     // special purpose stack class for backstepping.  You've heard of circular queues
     // implemented with an array, right?  This is a circular stack!  When full, the
     // newly-pushed item overwrites the oldest item, with circular top!  All operations
-    // are constant time.  It's synchronized too, to be safe (is used by both the
-    // simulation thread and the GUI thread for the back-step button).
+    // are constant time.  Upstream synchronized it too, to be safe (it was used by both the
+    // simulation thread and the GUI thread for the back-step button); this fork is headless and
+    // single threaded under TeaVM, and the stack is pushed twice per instruction, so the monitors
+    // cost more than the operations they guard.
     // Upon construction, it is filled with newly-created empty BackStep objects which
     // will exist for the life of the stack.  Push does not create a BackStep object
     // but instead overwrites the contents of the existing one.  Thus during RISCV
@@ -431,11 +492,11 @@ public class BackStepper {
             return usedStack;
         }
 
-        private synchronized boolean empty() {
+        private boolean empty() {
             return size == 0;
         }
 
-        private synchronized void push(Action act, int programCounter, int parm1, long parm2) {
+        private void push(Action act, int programCounter, int parm1, long parm2) {
             if (size == 0) {
                 top = 0;
                 size++;
@@ -450,17 +511,17 @@ public class BackStepper {
             stack[top].assign(act, programCounter, parm1, parm2);
         }
 
-        private synchronized void push(Action act, int programCounter, int parm1) {
+        private void push(Action act, int programCounter, int parm1) {
             push(act, programCounter, parm1, 0);
         }
 
-        private synchronized void push(Action act, int programCounter) {
+        private void push(Action act, int programCounter) {
             push(act, programCounter, 0, 0);
         }
 
         // NO PROTECTION.  This class is used only within this file so there is no excuse
         // for trying to pop from empty stack.
-        private synchronized BackStep pop() {
+        private BackStep pop() {
             BackStep bs;
             bs = stack[top];
             if (size == 1) {
@@ -474,7 +535,7 @@ public class BackStepper {
 
         // NO PROTECTION.  This class is used only within this file so there is no excuse
         // for trying to peek from empty stack.
-        private synchronized BackStep peek() {
+        private BackStep peek() {
             return stack[top];
         }
 

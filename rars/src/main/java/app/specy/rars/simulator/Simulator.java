@@ -6,6 +6,7 @@ import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.InterruptController;
+import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
@@ -327,7 +328,21 @@ public class Simulator extends Observable {
          * Implements Runnable
          */
 
+        /** How many instructions may pass between samples of the host clock for the time counter. */
+        private static final int TIME_SAMPLE_INSTRUCTIONS = 64;
+
         public void run() {
+            // the three counters written on every instruction, resolved once instead of by name
+            final Register cycleRegister = ControlAndStatusRegisterFile.getRegister(
+                    ControlAndStatusRegisterFile.CYCLE);
+            final Register instretRegister = ControlAndStatusRegisterFile.getRegister(
+                    ControlAndStatusRegisterFile.INSTRET);
+            final Register timeRegister = ControlAndStatusRegisterFile.getRegister("time");
+            // and the three interrupt state counters read on every instruction
+            final Register uipRegister = ControlAndStatusRegisterFile.getRegister("uip");
+            final Register uieRegister = ControlAndStatusRegisterFile.getRegister("uie");
+            final Register ustatusRegister = ControlAndStatusRegisterFile.getRegister("ustatus");
+            int timeSampleCountdown = 1;
 
             if (breakPoints == null || breakPoints.length == 0) {
                 breakPoints = null;
@@ -374,17 +389,17 @@ public class Simulator extends Observable {
             // Used to stop or pause a running program.  See stopSimulation() above.
             while (!stop) {
                 SystemIO.flush(false);
-                // Perform the RISCV instruction in synchronized block.  If external threads agree
-                // to access memory and registers only through synchronized blocks on same
-                // lock variable, then full (albeit heavy-handed) protection of memory and
-                // registers is assured.  Not as critical for reading from those resources.
+                // Upstream performed the RISCV instruction in a synchronized block, so that
+                // external threads accessing memory and registers through the same lock were given
+                // full (albeit heavy-handed) protection. This fork runs single threaded under
+                // TeaVM, so the block below is no longer synchronized; see InterruptController.lock.
                 try {
                     // Handle pending interupts and traps first
-                    long uip = ControlAndStatusRegisterFile.getValueNoNotify("uip"), uie = ControlAndStatusRegisterFile.getValueNoNotify("uie");
-                    boolean IE = (ControlAndStatusRegisterFile.getValueNoNotify("ustatus") & ControlAndStatusRegisterFile.INTERRUPT_ENABLE) != 0;
+                    long uip = uipRegister.getValueNoNotify(), uie = uieRegister.getValueNoNotify();
+                    boolean IE = (ustatusRegister.getValueNoNotify() & ControlAndStatusRegisterFile.INTERRUPT_ENABLE) != 0;
                     // make sure no interrupts sneak in while we are processing them
                     pc = RegisterFile.getProgramCounter();
-                    synchronized (InterruptController.lock) {
+                    {
                         boolean pendingExternal = InterruptController.externalPending(),
                                 pendingTimer = InterruptController.timerPending(),
                                 pendingTrap = InterruptController.trapPending();
@@ -417,7 +432,7 @@ public class Simulator extends Observable {
                         }
                         uip |= (pendingExternal ? ControlAndStatusRegisterFile.EXTERNAL_INTERRUPT : 0) | (pendingTimer ? ControlAndStatusRegisterFile.TIMER_INTERRUPT : 0);
                     }
-                    if (uip != ControlAndStatusRegisterFile.getValueNoNotify("uip")) {
+                    if (uip != uipRegister.getValueNoNotify()) {
                         ControlAndStatusRegisterFile.updateRegister("uip", uip);
                     }
 
@@ -506,13 +521,17 @@ public class Simulator extends Observable {
 
                 }
 
-                // Update cycle(h) and instret(h)
-                long cycle = ControlAndStatusRegisterFile.getValueNoNotify("cycle"),
-                         instret = ControlAndStatusRegisterFile.getValueNoNotify("instret"),
-                         time = System.currentTimeMillis();;
-                ControlAndStatusRegisterFile.updateRegisterBackdoor("cycle",cycle+1);
-                ControlAndStatusRegisterFile.updateRegisterBackdoor("instret",instret+1);
-                ControlAndStatusRegisterFile.updateRegisterBackdoor("time",time);
+                // Update cycle(h) and instret(h). One undo entry covers both, which is also what
+                // keeps the shipped undo history covering as many instructions as it says.
+                ControlAndStatusRegisterFile.incrementCounters(cycleRegister, instretRegister, pc);
+                // The time counter reports milliseconds, and reading the host clock allocates both
+                // a date and a boxed long, so it is sampled rather than read on every instruction.
+                // A sample this often is still far finer than the millisecond it reports.
+                if (--timeSampleCountdown <= 0) {
+                    timeSampleCountdown = TIME_SAMPLE_INSTRUCTIONS;
+                    ControlAndStatusRegisterFile.updateRegisterBackdoor(timeRegister,
+                            System.currentTimeMillis());
+                }
 
                 //     Return if we've reached a breakpoint.
                 if (ebreak || (breakPoints != null) &&

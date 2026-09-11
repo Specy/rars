@@ -121,11 +121,30 @@ public class ControlAndStatusRegisterFile {
      * @param val  The desired value for the register.
      * @return old value in register prior to update
      **/
+    /** Names of the two counters the simulator advances on every instruction. */
+    public static final String CYCLE = "cycle";
+    public static final String INSTRET = "instret";
+
     public static void updateRegisterBackdoor(int num, long val) {
+        updateRegisterBackdoor(instance.getRegister(num), val);
+    }
+
+    /**
+     * As above, for a register the caller already holds. The simulator writes the cycle, instret
+     * and time counters on every instruction, so it resolves them once rather than by name.
+     *
+     * @param register Register to set the value of.
+     * @param val      The desired value for the register.
+     **/
+    public static void updateRegisterBackdoor(Register register, long val) {
+        long old = register.setValueBackdoor(val);
+        // Writing a register the value it already holds is not a change, and its undo entry would
+        // restore that same value, so none is recorded. The time counter reports milliseconds and
+        // is written every instruction, so nearly all of its writes are such no-ops; recording them
+        // spent the whole undo history on entries that undo nothing.
+        if (old == val) return;
         if ((Globals.getSettings().getBackSteppingEnabled())) {
-            Globals.program.getBackStepper().addControlAndStatusBackdoor(num, instance.getRegister(num).setValueBackdoor(val));
-        } else {
-            instance.getRegister(num).setValueBackdoor(val);
+            Globals.program.getBackStepper().addControlAndStatusBackdoor(register.getNumber(), old);
         }
     }
 
@@ -137,7 +156,7 @@ public class ControlAndStatusRegisterFile {
      * @return old value in register prior to update
      **/
     public static void updateRegisterBackdoor(String name, long val) {
-        updateRegisterBackdoor(instance.getRegister(name).getNumber(), val);
+        updateRegisterBackdoor(instance.getRegister(name), val);
     }
 
     /**
@@ -252,6 +271,31 @@ public class ControlAndStatusRegisterFile {
     }
 
     
+    /**
+     * Adds one to the cycle and instret counters and records a single undo entry for both, which is
+     * what the simulator does once per instruction. Neither counter has any other writer: both are
+     * read only to programs, so this increment is the whole of their history.
+     *
+     * The caller passes the address of the instruction being counted. The BackStepper's own `pc()`
+     * cannot be used here: it reads the program counter and subtracts one instruction, which names
+     * the executing instruction only while the instruction did not change the program counter, and
+     * these counters are advanced after it has.
+     */
+    public static void incrementCounters(Register cycle, Register instret, int pc) {
+        cycle.setValueBackdoor(cycle.getValueNoNotify() + 1);
+        instret.setValueBackdoor(instret.getValueNoNotify() + 1);
+        if (Globals.getSettings().getBackSteppingEnabled()) {
+            Globals.program.getBackStepper().addControlAndStatusCountersDecrement(pc);
+        }
+    }
+
+    /** Undoes one {@link #incrementCounters} step. */
+    public static void decrementCounters() {
+        Register cycle = instance.getRegister(CYCLE), instret = instance.getRegister(INSTRET);
+        cycle.setValueBackdoor(cycle.getValueNoNotify() - 1);
+        instret.setValueBackdoor(instret.getValueNoNotify() - 1);
+    }
+
     public static Register getRegister(String name) {
         return instance.getRegister(name);
     }

@@ -17,7 +17,7 @@ public class MaskedRegister extends Register {
         this.mask = mask;
     }
 
-    public synchronized long setValue(long val) {
+    public long setValue(long val) {
         long current = getValue();
         super.setValue((current & mask) | (val & ~mask));
         return current;

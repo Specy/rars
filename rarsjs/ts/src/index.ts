@@ -297,7 +297,16 @@ export enum BackStepAction {
     CONTROL_AND_STATUS_REGISTER_RESTORE,
     CONTROL_AND_STATUS_REGISTER_BACKDOOR,
     FLOATING_POINT_REGISTER_RESTORE,
-    DO_NOTHING
+    DO_NOTHING,
+    /**
+     * Undoes one instruction's worth of the `cycle` and `instret` counters. The simulator adds one
+     * to each of them per instruction and nothing else writes them, so a single entry without
+     * parameters covers both.
+     *
+     * Members mirror the core's `BackStepper.Action` by position, because the core reports an
+     * action as that enum's ordinal. Append here; never insert.
+     */
+    CONTROL_AND_STATUS_COUNTERS_DECREMENT
 }
 
 /**

@@ -2,6 +2,8 @@ package app.specy.rars.riscv.hardware;
 
 import app.specy.rars.util.Binary;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Observer;
 
 /*
@@ -44,10 +46,32 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 public class RegisterBlock {
     private final Register[] regFile;
     private final char prefix;
+    /** Registers by name, and by number in a table indexed directly to keep the lookup allocation free. */
+    private final Map<String, Register> byName;
+    private final Register[] byNumber;
 
     protected RegisterBlock(char prefix, Register[] registers) {
         this.prefix = prefix;
         this.regFile = registers;
+        // The block is fixed at construction, so both lookups are indexed once here instead of
+        // scanning it on every access. The simulator reads and writes the cycle, time and instret
+        // CSRs on every instruction and every instruction operand resolves a register by number,
+        // and each of those used to walk the whole block comparing names or numbers.
+        this.byName = new HashMap<>();
+        int highestNumber = 0;
+        for (Register register : registers) {
+            if (register == null) continue;
+            if (register.getNumber() > highestNumber) highestNumber = register.getNumber();
+        }
+        this.byNumber = new Register[highestNumber + 1];
+        for (Register register : registers) {
+            if (register == null) continue;
+            // first match wins, which is what scanning the block in order did
+            this.byName.putIfAbsent(register.getName(), register);
+            if (this.byNumber[register.getNumber()] == null) {
+                this.byNumber[register.getNumber()] = register;
+            }
+        }
     }
 
     /**
@@ -108,12 +132,7 @@ public class RegisterBlock {
      * @return the register for num or null if none exists
      */
     public Register getRegister(int num) {
-        for (Register r : regFile) {
-            if (r.getNumber() == num) {
-                return r;
-            }
-        }
-        return null;
+        return (num >= 0 && num < byNumber.length) ? byNumber[num] : null;
     }
 
     /**
@@ -126,10 +145,9 @@ public class RegisterBlock {
         if(name.length() < 2) return null;
 
         // Handle a direct name
-        for (Register r : regFile) {
-            if (r.getName().equals(name)) {
-                return r;
-            }
+        Register direct = byName.get(name);
+        if (direct != null) {
+            return direct;
         }
         // Handle prefix case
         if (name.charAt(0) == prefix) {

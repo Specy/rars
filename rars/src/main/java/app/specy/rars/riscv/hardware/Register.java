@@ -45,6 +45,9 @@ public class Register extends Observable {
     // w/o the use of synchronized methods.  getValue and setValue
     // are the only methods here used by the register collection
     // (RegisterFile, ControlAndStatusRegisterFile, FloatingPointRegisterFile) methods.
+    // The accessors below take that at its word and are no longer synchronized: the simulator
+    // touches them several times per instruction, and entering and leaving a monitor each time
+    // was about a tenth of simulation.
     private volatile long value;
 
     /**
@@ -79,7 +82,7 @@ public class Register extends Observable {
      * @return value The value of the Register.
      */
 
-    public synchronized long getValue() {
+    public long getValue() {
         notifyAnyObservers(AccessNotice.READ);
         return value;
     }
@@ -92,7 +95,7 @@ public class Register extends Observable {
      * @return value The value of the Register.
      */
 
-    public synchronized long getValueNoNotify() {
+    public long getValueNoNotify() {
         return value;
     }
 
@@ -125,7 +128,7 @@ public class Register extends Observable {
      * @return previous value of register
      */
 
-    public synchronized long setValue(long val) {
+    public long setValue(long val) {
         long old = value;
         value = val;
         notifyAnyObservers(AccessNotice.WRITE);
@@ -140,7 +143,7 @@ public class Register extends Observable {
      * @return previous value of register
      */
 
-    public synchronized long setValueBackdoor(long val) {
+    public long setValueBackdoor(long val) {
         long old = value;
         value = val;
         return old;

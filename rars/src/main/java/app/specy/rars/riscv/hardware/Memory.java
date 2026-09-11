@@ -1249,7 +1249,9 @@ public class Memory extends Observable {
     // client using STORE or FETCH in last arg.
     // Modified 29 Dec 2005 to return old value of replaced bytes, for STORE.
     //
-    private synchronized int storeOrFetchBytesInTable(int[][] blockTable,
+    // Not synchronized: this fork is headless and single threaded under TeaVM, and these back every
+    // instruction fetch and every load and store.
+    private int storeOrFetchBytesInTable(int[][] blockTable,
                                                       int relativeByteAddress, int length, int value, boolean op) {
         int relativeWordAddress, block, offset, bytePositionInMemory, bytePositionInValue;
         int oldValue = 0; // for STORE, return old values of replaced bytes
@@ -1301,7 +1303,7 @@ public class Memory extends Observable {
     // and block size.  Assumes address is word aligned, no endian processing.
     // Modified 29 Dec 2005 to return overwritten value.
 
-    private synchronized int storeWordInTable(int[][] blockTable, int relative, int value) {
+    private int storeWordInTable(int[][] blockTable, int relative, int value) {
         int block, offset, oldValue;
         block = relative / BLOCK_LENGTH_WORDS;
         offset = relative % BLOCK_LENGTH_WORDS;
@@ -1315,7 +1317,7 @@ public class Memory extends Observable {
     }
 
     // Same as above, but doesn't set, just gets
-    private synchronized int fetchWordFromTable(int[][] blockTable, int relative) {
+    private int fetchWordFromTable(int[][] blockTable, int relative) {
         int value = 0;
         int block, offset;
         block = relative / BLOCK_LENGTH_WORDS;
@@ -1331,7 +1333,7 @@ public class Memory extends Observable {
 
     // Same as above, but if it hasn't been allocated returns null.
     // Developed by Greg Gibeling of UC Berkeley, fall 2007.
-    private synchronized Integer fetchWordOrNullFromTable(int[][] blockTable, int relative) {
+    private Integer fetchWordOrNullFromTable(int[][] blockTable, int relative) {
         int value = 0;
         int block, offset;
         block = relative / BLOCK_LENGTH_WORDS;

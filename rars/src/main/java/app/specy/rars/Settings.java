@@ -266,11 +266,13 @@ public class Settings extends Observable {
      * @throws IllegalArgumentException if identifier is invalid.
      */
     public boolean getBooleanSetting(Bool setting) {
-        if (booleanSettingsValues.containsKey(setting)) {
-            return booleanSettingsValues.get(setting);
-        } else {
+        // one lookup rather than a containsKey followed by a get: the simulator reads the
+        // self-modifying code and back-stepping flags several times per instruction
+        Boolean value = booleanSettingsValues.get(setting);
+        if (value == null) {
             throw new IllegalArgumentException("Invalid boolean setting ID");
         }
+        return value;
     }
 
     /**
