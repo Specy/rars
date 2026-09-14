@@ -616,35 +616,43 @@ export interface JsRiscV {
      * the high half of register `i` and `2 * i + 1` its low half, so the array holds 64 numbers.
      * The registers are in `RISCV_FLOATING_POINT_REGISTERS` order, and both halves matter on both
      * targets: the file is 64 bit wide even on RV32, where a single is NaN-boxed into it (its high
-     * half is `0xFFFFFFFF`). Compose a value with `highLowToBigint`.
+     * half is `0xFFFFFFFF`).
+     *
+     * The core hands this over as an `Int32Array` of signed 32 bit halves, so a half with its top
+     * bit set reads back negative: compose each pair with `highLowToBigint`, which takes both
+     * halves unsigned, rather than mapping `>>> 0` over the array (a typed array's `map` truncates
+     * the result back to int32, handing you the negative value again).
      *
      * Pairs rather than decimal strings because this is read on every panel refresh, and a 64 bit
      * conversion per register is the kind of work that costs in the compiled core.
      */
-    getFloatingPointRegistersValues(): number[];
+    getFloatingPointRegistersValues(): Int32Array;
 
     /**
      * Sets one floating point register, writing it directly: no undo entry is recorded, because
      * presetting a register from the host is not something the program did. Split the value with
      * `bigintToHighLow`, and NaN-box a single yourself (`0xFFFFFFFFn << 32n | bits`) if that is
      * what you mean.
-     * @param index Position in `RISCV_FLOATING_POINT_REGISTERS`, 0 to 31. Anything else throws.
+     * @param index Position in `RISCV_FLOATING_POINT_REGISTERS`. Must be a whole number from 0 to
+     * 31; anything else throws.
      */
     setFloatingPointRegisterValue(index: number, high: number, low: number): void;
 
     /**
      * Gets every control and status register as a high/low pair, in the same shape as
-     * `getFloatingPointRegistersValues`: 34 numbers for the 17 registers of
-     * `RISCV_CSR_REGISTERS`. The `cycle` and `instret` counters are settled first, so they count
-     * every instruction executed so far.
+     * `getFloatingPointRegistersValues`: an `Int32Array` of 34 signed halves for the 17 registers
+     * of `RISCV_CSR_REGISTERS`, to be composed with `highLowToBigint` for the same reason. The
+     * `cycle` and `instret` counters are settled first, so they count every instruction executed
+     * so far.
      */
-    getControlAndStatusRegistersValues(): number[];
+    getControlAndStatusRegistersValues(): Int32Array;
 
     /**
      * Sets one control and status register, writing it directly and recording no undo entry.
      * Writing `fflags` or `frm` updates `fcsr`, and writing a counter such as `cycle` is allowed
      * here even though the program cannot write it.
-     * @param index Position in `RISCV_CSR_REGISTERS`, 0 to 16. Anything else throws.
+     * @param index Position in `RISCV_CSR_REGISTERS`. Must be a whole number from 0 to 16;
+     * anything else throws.
      */
     setControlAndStatusRegisterValue(index: number, high: number, low: number): void;
 

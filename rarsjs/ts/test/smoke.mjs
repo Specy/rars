@@ -552,6 +552,15 @@ assert.equal(csrByName('cycle'), csrByName('instret'), 'cycle and instret advanc
 assert.equal(csrByName('cycleh'), csrByName('cycle') >> 32n, 'a linked register reads through its base')
 assert.equal(csrByName('timeh'), csrByName('time') >> 32n, 'the time halves agree')
 
+// Both counters are zero in their high half after a ten instruction program, so the equalities
+// above only pin the zero state: give a counter a non-zero high half through the setter and check
+// that the *h half really reads through its base, which is how RV32 presents a 64 bit counter.
+fpu.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('cycle'), 0x2A, 7)
+const csrLinked = readRegisterFile(fpu.getControlAndStatusRegistersValues())
+const csrLinkedByName = name => csrLinked[RISCV_CSR_REGISTERS.indexOf(name)]
+assert.equal(csrLinkedByName('cycle'), 0x2A00000007n, 'the counter should hold both halves written')
+assert.equal(csrLinkedByName('cycleh'), 0x2An, 'cycleh should read the high half of cycle')
+
 // Setters write the register directly: presetting one from the host is not something the program
 // did, so it must not land in the undo history.
 const undoStackBefore = fpu.getUndoStack().length
