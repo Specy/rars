@@ -12,7 +12,10 @@ if (!existsSync(fileURLToPath(dist))) {
 }
 
 const packageExports = await import(dist)
-const { RISCV, makeRiscVFromFiles, registerHandlers, unimplementedHandler, StopReason } = packageExports
+const {
+    RISCV, makeRiscVFromFiles, registerHandlers, unimplementedHandler, StopReason,
+    RISCV_FLOATING_POINT_REGISTERS, RISCV_CSR_REGISTERS, bigintToHighLow, highLowToBigint,
+} = packageExports
 
 const makeSingleFileRiscV = source => makeRiscVFromFiles({ 'main.asm': source }, 'main.asm')
 
@@ -467,3 +470,135 @@ assert.equal(peripherals.countMemoryObservers(), 0)
 peripherals.removeMemoryObservers()
 
 console.log(`ok - peripherals: ${writes.length} observed writes, slept ${slept.join(',')}ms, clock ${clock}`)
+
+// The floating point and control and status register files. Both cross the boundary as flat
+// arrays of high/low int pairs, so every assertion here goes through `highLowToBigint`.
+const FP_SOURCE = `
+    .data
+buf:    .word 0
+
+    .text
+    .globl main
+main:
+    li   t0, 3
+    fcvt.s.w ft0, t0        # 3.0f, NaN-boxed into the 64 bit register
+    fcvt.d.s ft1, ft0       # 3.0d
+    fadd.s   ft2, ft0, ft0  # 6.0f
+    la   t1, buf
+    fsw  ft2, 0(t1)
+    flw  ft3, 0(t1)         # 6.0f, round-tripped through memory
+    li   a7, 10
+    ecall
+`
+
+const NAN_BOXED_3F = 0xFFFFFFFF40400000n
+const NAN_BOXED_6F = 0xFFFFFFFF40C00000n
+const DOUBLE_3 = 0x4008000000000000n
+
+const readRegisterFile = halves => {
+    const flat = Array.from(halves)
+    assert.equal(flat.length % 2, 0, 'a register file is returned as high/low pairs')
+    const values = []
+    for (let i = 0; i < flat.length; i += 2) values.push(highLowToBigint(flat[i], flat[i + 1]))
+    return values
+}
+
+const runFpProgram = async () => {
+    const program = makeSingleFileRiscV(FP_SOURCE)
+    registerHandlers(program, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    const assembled = program.assemble()
+    assert.equal(assembled.hasErrors, false, `floating point assembly failed: ${assembled.report}`)
+    program.initialize(true)
+    let steps = 0
+    while (!program.terminated && steps < 10_000) {
+        await program.step()
+        steps++
+    }
+    assert.ok(program.terminated, 'floating point program did not terminate')
+    return program
+}
+
+assert.equal(RISCV_FLOATING_POINT_REGISTERS.length, 32)
+assert.equal(RISCV_FLOATING_POINT_REGISTERS[0], 'ft0')
+assert.equal(RISCV_FLOATING_POINT_REGISTERS[8], 'fs0')
+assert.equal(RISCV_FLOATING_POINT_REGISTERS[10], 'fa0')
+assert.deepEqual(RISCV_CSR_REGISTERS.slice(0, 4), ['ustatus', 'fflags', 'frm', 'fcsr'])
+assert.equal(RISCV_CSR_REGISTERS.length, 17)
+assert.equal(RISCV_CSR_REGISTERS[13], 'instret')
+
+assert.equal(highLowToBigint(0xFFFFFFFF | 0, 0x40400000), NAN_BOXED_3F, 'both halves compose unsigned')
+assert.deepEqual(bigintToHighLow(NAN_BOXED_3F), [0xFFFFFFFF, 0x40400000])
+
+RISCV.setIs64Bit(false)
+const fpu = await runFpProgram()
+
+const fpRaw = Array.from(fpu.getFloatingPointRegistersValues())
+assert.equal(fpRaw.length, 64, 'the floating point file is 32 registers of two halves')
+assert.equal(fpRaw[0] >>> 0, 0xFFFFFFFF, 'ft0 high half: a single is NaN-boxed')
+assert.equal(fpRaw[1] >>> 0, 0x40400000, 'ft0 low half: 3.0f')
+
+const fp = readRegisterFile(fpu.getFloatingPointRegistersValues())
+assert.equal(fp[0], NAN_BOXED_3F, 'ft0 should hold 3.0f, NaN-boxed')
+assert.equal(fp[1], DOUBLE_3, 'ft1 should hold 3.0d')
+assert.equal(fp[2], NAN_BOXED_6F, 'ft2 should hold 6.0f')
+assert.equal(fp[3], NAN_BOXED_6F, 'ft3 should hold 6.0f read back from memory')
+assert.ok(fp.slice(4).every(value => value === 0n), 'untouched floating point registers stay zero')
+
+const csr = readRegisterFile(fpu.getControlAndStatusRegistersValues())
+assert.equal(csr.length, RISCV_CSR_REGISTERS.length, 'the control and status file is 17 registers')
+const csrByName = name => csr[RISCV_CSR_REGISTERS.indexOf(name)]
+assert.ok(csrByName('instret') > 0n, 'instret should count the instructions executed')
+assert.equal(csrByName('cycle'), csrByName('instret'), 'cycle and instret advance together')
+assert.equal(csrByName('cycleh'), csrByName('cycle') >> 32n, 'a linked register reads through its base')
+assert.equal(csrByName('timeh'), csrByName('time') >> 32n, 'the time halves agree')
+
+// Setters write the register directly: presetting one from the host is not something the program
+// did, so it must not land in the undo history.
+const undoStackBefore = fpu.getUndoStack().length
+assert.ok(undoStackBefore > 0, 'the executed program should have recorded undo entries')
+
+const PRESET_FP = 0x123456789ABCDEF0n
+fpu.setFloatingPointRegisterValue(5, ...bigintToHighLow(PRESET_FP))
+fpu.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('uscratch'), 0, 0x77)
+// A linked register writes the register it aliases.
+fpu.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('frm'), 0, 3)
+
+const fpAfterSet = readRegisterFile(fpu.getFloatingPointRegistersValues())
+assert.equal(fpAfterSet[5], PRESET_FP, 'the floating point setter should round-trip through the getter')
+const csrAfterSet = readRegisterFile(fpu.getControlAndStatusRegistersValues())
+const csrAfterSetByName = name => csrAfterSet[RISCV_CSR_REGISTERS.indexOf(name)]
+assert.equal(csrAfterSetByName('uscratch'), 0x77n, 'the control and status setter should round-trip')
+assert.equal(csrAfterSetByName('frm'), 3n, 'writing frm should read back')
+assert.equal(csrAfterSetByName('fcsr'), 0x60n, 'writing frm should update the fcsr it aliases')
+assert.equal(fpu.getUndoStack().length, undoStackBefore, 'a setter must not add an undo entry')
+
+// The core rolls its own floating point writes back, so undo restores the file without the
+// wrapper touching it - while the values preset above, which were never undo entries, survive.
+assert.ok(fpu.canUndo, 'the program should still be undoable')
+while (fpu.canUndo) fpu.undo()
+const fpAfterUndo = readRegisterFile(fpu.getFloatingPointRegistersValues())
+assert.equal(fpAfterUndo[0], 0n, 'undo should restore ft0')
+assert.equal(fpAfterUndo[1], 0n, 'undo should restore ft1')
+assert.equal(fpAfterUndo[2], 0n, 'undo should restore ft2')
+assert.equal(fpAfterUndo[3], 0n, 'undo should restore ft3')
+assert.equal(fpAfterUndo[5], PRESET_FP, 'undo must not roll back a value the host preset')
+const csrAfterUndo = readRegisterFile(fpu.getControlAndStatusRegistersValues())
+assert.equal(csrAfterUndo[RISCV_CSR_REGISTERS.indexOf('instret')], 0n, 'undo should roll the counters back')
+assert.equal(csrAfterUndo[RISCV_CSR_REGISTERS.indexOf('uscratch')], 0x77n, 'undo must not roll back a preset CSR')
+
+assert.throws(() => fpu.setFloatingPointRegisterValue(32, 0, 0), /out of range/)
+assert.throws(() => fpu.setFloatingPointRegisterValue(-1, 0, 0), /out of range/)
+assert.throws(() => fpu.setControlAndStatusRegisterValue(17, 0, 0), /out of range/)
+assert.throws(() => fpu.setControlAndStatusRegisterValue(-1, 0, 0), /out of range/)
+
+// The files are 64 bit wide on both targets, and a single stays NaN-boxed on RV64 too.
+RISCV.setIs64Bit(true)
+const fpu64 = await runFpProgram()
+const fp64 = readRegisterFile(fpu64.getFloatingPointRegistersValues())
+assert.equal(fp64.length, 32)
+assert.equal(fp64[0], NAN_BOXED_3F, 'RV64: ft0 should hold 3.0f, NaN-boxed')
+assert.equal(fp64[1], DOUBLE_3, 'RV64: ft1 should hold 3.0d')
+assert.equal(readRegisterFile(fpu64.getControlAndStatusRegistersValues()).length, 17)
+RISCV.setIs64Bit(false)
+
+console.log(`ok - register files: ft0=${fp[0].toString(16)}, ft1=${fp[1].toString(16)}, instret=${csrByName('instret')}`)

@@ -5,6 +5,8 @@ import app.specy.rars.assembler.SourceLine;
 import app.specy.rars.assembler.TokenList;
 import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.hardware.AddressErrorException;
+import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
+import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.Simulator;
@@ -279,6 +281,82 @@ public class JsRiscV {
         return Arrays.stream(RegisterFile.getRegisters()).mapToInt((v) -> (int) v.getValue()).toArray();
     }
 
+
+    /*
+     * The floating point and control and status register files, as flat int arrays of high/low
+     * pairs: element 2i is the high 32 bits of register i and 2i+1 its low 32 bits. Both files hold
+     * 64 bit values, and a BigInteger (or a decimal String, as the general registers use) per
+     * register per panel refresh is exactly the long work TeaVM compiles into allocating BigInt
+     * operations. Values are read without notifying observers, because the host inspecting a
+     * register is not the program reading it.
+     */
+
+    /**
+     * @return 64 ints, high/low per register, in FloatingPointRegisterFile.getRegisters() order:
+     *         ft0-ft7, fs0, fs1, fa0-fa7, fs2-fs11, ft8-ft11.
+     */
+    @JSExport
+    public int[] getFloatingPointRegistersValues() {
+        Register[] registers = FloatingPointRegisterFile.getRegisters();
+        int[] values = new int[registers.length * 2];
+        for (int i = 0; i < registers.length; i++) {
+            long value = registers[i].getValueNoNotify();
+            values[i * 2] = (int) (value >>> 32);
+            values[i * 2 + 1] = (int) value;
+        }
+        return values;
+    }
+
+    /**
+     * Writes one floating point register directly, bypassing the back stepper: a value the host
+     * presets is not something the program did, so it must not become an undo entry.
+     *
+     * @param index Position in the order getFloatingPointRegistersValues() returns, 0 to 31.
+     */
+    @JSExport
+    public void setFloatingPointRegisterValue(int index, int high, int low) {
+        Register[] registers = FloatingPointRegisterFile.getRegisters();
+        if (index < 0 || index >= registers.length) {
+            throw new IllegalArgumentException("Floating point register index out of range: " + index);
+        }
+        registers[index].setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
+    }
+
+    /**
+     * @return 34 ints, high/low per register, in ControlAndStatusRegisterFile.getRegisters() order:
+     *         ustatus, fflags, frm, fcsr, uie, utvec, uscratch, uepc, ucause, utval, uip, cycle,
+     *         time, instret, cycleh, timeh, instreth. The linked registers (fflags, frm and the
+     *         *h halves) read through the register they alias, and getRegisters() settles the
+     *         lazily counted cycle and instret first, so no value is behind.
+     */
+    @JSExport
+    public int[] getControlAndStatusRegistersValues() {
+        Register[] registers = ControlAndStatusRegisterFile.getRegisters();
+        int[] values = new int[registers.length * 2];
+        for (int i = 0; i < registers.length; i++) {
+            long value = registers[i].getValueNoNotify();
+            values[i * 2] = (int) (value >>> 32);
+            values[i * 2 + 1] = (int) value;
+        }
+        return values;
+    }
+
+    /**
+     * Writes one control and status register directly, bypassing the back stepper, through the
+     * register's own setValue: a linked register writes the register it aliases, a masked register
+     * keeps the bits it does not own, and a read only register is written as the back door does,
+     * because the host is not the program.
+     *
+     * @param index Position in the order getControlAndStatusRegistersValues() returns, 0 to 16.
+     */
+    @JSExport
+    public void setControlAndStatusRegisterValue(int index, int high, int low) {
+        Register[] registers = ControlAndStatusRegisterFile.getRegisters();
+        if (index < 0 || index >= registers.length) {
+            throw new IllegalArgumentException("Control and status register index out of range: " + index);
+        }
+        registers[index].setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
+    }
 
     @JSExport
     public JsBackStep[] getUndoStack() {

@@ -379,6 +379,33 @@ function keysOfEnum<T>(e: T): string[]{
 
 export const RISCV_REGISTERS = keysOfEnum(RISCVRegisters) as RegisterName[]
 
+/**
+ * The floating point registers, in the order `getFloatingPointRegistersValues` returns them, which
+ * is the order the core holds them in: register number 0 to 31, spelled as RARS spells them.
+ */
+export const RISCV_FLOATING_POINT_REGISTERS = [
+    'ft0', 'ft1', 'ft2', 'ft3', 'ft4', 'ft5', 'ft6', 'ft7',
+    'fs0', 'fs1',
+    'fa0', 'fa1', 'fa2', 'fa3', 'fa4', 'fa5', 'fa6', 'fa7',
+    'fs2', 'fs3', 'fs4', 'fs5', 'fs6', 'fs7', 'fs8', 'fs9', 'fs10', 'fs11',
+    'ft8', 'ft9', 'ft10', 'ft11',
+] as const
+
+export type FloatingPointRegisterName = typeof RISCV_FLOATING_POINT_REGISTERS[number]
+
+/**
+ * The control and status registers the core implements, in the order
+ * `getControlAndStatusRegistersValues` returns them. `fflags` and `frm` are windows onto `fcsr`,
+ * and `cycleh`, `timeh` and `instreth` are the high halves of `cycle`, `time` and `instret`, so
+ * those pairs always agree.
+ */
+export const RISCV_CSR_REGISTERS = [
+    'ustatus', 'fflags', 'frm', 'fcsr', 'uie', 'utvec', 'uscratch', 'uepc', 'ucause', 'utval',
+    'uip', 'cycle', 'time', 'instret', 'cycleh', 'timeh', 'instreth',
+] as const
+
+export type CsrRegisterName = typeof RISCV_CSR_REGISTERS[number]
+
 
 type HandlerName = keyof HandlerMap
 
@@ -435,11 +462,6 @@ export interface JsRiscV {
      */
     step(): Promise<StopReason>;
 
-
-    /**
-     * Gets the 8 condition flags.
-     */
-    getConditionFlags(): number[];
 
 
     /**
@@ -590,6 +612,43 @@ export interface JsRiscV {
     getRegistersValuesLong(): string[];
 
     /**
+     * Gets every floating point register as a high/low pair of 32 bit halves: element `2 * i` is
+     * the high half of register `i` and `2 * i + 1` its low half, so the array holds 64 numbers.
+     * The registers are in `RISCV_FLOATING_POINT_REGISTERS` order, and both halves matter on both
+     * targets: the file is 64 bit wide even on RV32, where a single is NaN-boxed into it (its high
+     * half is `0xFFFFFFFF`). Compose a value with `highLowToBigint`.
+     *
+     * Pairs rather than decimal strings because this is read on every panel refresh, and a 64 bit
+     * conversion per register is the kind of work that costs in the compiled core.
+     */
+    getFloatingPointRegistersValues(): number[];
+
+    /**
+     * Sets one floating point register, writing it directly: no undo entry is recorded, because
+     * presetting a register from the host is not something the program did. Split the value with
+     * `bigintToHighLow`, and NaN-box a single yourself (`0xFFFFFFFFn << 32n | bits`) if that is
+     * what you mean.
+     * @param index Position in `RISCV_FLOATING_POINT_REGISTERS`, 0 to 31. Anything else throws.
+     */
+    setFloatingPointRegisterValue(index: number, high: number, low: number): void;
+
+    /**
+     * Gets every control and status register as a high/low pair, in the same shape as
+     * `getFloatingPointRegistersValues`: 34 numbers for the 17 registers of
+     * `RISCV_CSR_REGISTERS`. The `cycle` and `instret` counters are settled first, so they count
+     * every instruction executed so far.
+     */
+    getControlAndStatusRegistersValues(): number[];
+
+    /**
+     * Sets one control and status register, writing it directly and recording no undo entry.
+     * Writing `fflags` or `frm` updates `fcsr`, and writing a counter such as `cycle` is allowed
+     * here even though the program cannot write it.
+     * @param index Position in `RISCV_CSR_REGISTERS`, 0 to 16. Anything else throws.
+     */
+    setControlAndStatusRegisterValue(index: number, high: number, low: number): void;
+
+    /**
      * Gets the undo stack.
      * @returns An array of `JsBackStep` objects representing the history of the simulation.
      */
@@ -735,4 +794,13 @@ export function bigintToHighLow(value: bigint): [high: number, low: number] {
     const high = Number((value >> 32n) & 0xFFFFFFFFn)
     const low = Number(value & 0xFFFFFFFFn)
     return [high, low]
+}
+
+/**
+ * The inverse of `bigintToHighLow`: composes the unsigned 64 bit value of a high/low pair, as the
+ * register file getters return them. Both halves are taken unsigned, so a half the core hands over
+ * as a negative int still lands in the right place.
+ */
+export function highLowToBigint(high: number, low: number): bigint {
+    return (BigInt(high >>> 0) << 32n) | BigInt(low >>> 0)
 }
