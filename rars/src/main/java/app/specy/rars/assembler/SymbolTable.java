@@ -194,6 +194,20 @@ public class SymbolTable {
 
 
     /**
+     * Produce Symbol object from either local or global symbol table that has the
+     * given address. A label declared .globl lives only in the global table, so a
+     * local-only lookup would miss it.
+     *
+     * @param address The address to look up
+     * @return Symbol object having requested address, null if address not found in either symbol table.
+     **/
+    public Symbol getSymbolGivenIntAddressLocalOrGlobal(int address) {
+        Symbol sym = this.getSymbolGivenIntAddress(address);
+        return (sym == null) ? Globals.symbolTable.getSymbolGivenIntAddress(address) : sym;
+    }
+
+
+    /**
      * For obtaining the Data Symbols.
      *
      * @return An ArrayList of Symbol objects.

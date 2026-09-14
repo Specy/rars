@@ -223,6 +223,45 @@ assert.ok(project.getParsedStatements().every(statement => typeof statement.sour
 project.initialize(true)
 assert.equal(project.getNextStatement().sourcePath, 'src/main.asm')
 
+// A call stack frame names the label it jumped to, wherever that label was declared. A .globl
+// label - which is how one file calls into another - is moved out of the local symbol table and
+// into the global one at assembly, so a local-only lookup would miss it.
+const callStackProgram = makeRiscVFromFiles({
+    'main.asm': [
+        '.include "library.asm"',
+        '.text',
+        '.globl main',
+        'main:',
+        '    jal ra, shared',
+        '    jal ra, private',
+        '    li a7, 10',
+        '    ecall',
+        'private:',
+        '    jr ra',
+    ].join('\n'),
+    'library.asm': [
+        '.text',
+        '.globl shared',
+        'shared:',
+        '    jr ra',
+    ].join('\n'),
+}, 'main.asm')
+assert.equal(callStackProgram.assemble().hasErrors, false)
+callStackProgram.initialize(true)
+
+const visitedFrameLabels = []
+let callStackSteps = 0
+while (!callStackProgram.terminated && callStackSteps < 100) {
+    await callStackProgram.step()
+    callStackSteps++
+    for (const frame of callStackProgram.getCallStack()) {
+        const label = callStackProgram.getLabelAtAddress(frame.toAddress)
+        if (!visitedFrameLabels.includes(label)) visitedFrameLabels.push(label)
+    }
+}
+assert.deepEqual(visitedFrameLabels, ['shared', 'private'], 'both global and local callees should resolve to a name')
+assert.equal(callStackProgram.getLabelAtAddress(0x12345678), null, 'an address with no label is not an error')
+
 assert.throws(
     () => makeRiscVFromFiles({ './main.asm': SOURCE }, './main.asm'),
     /canonical|root-relative/,

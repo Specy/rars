@@ -2,6 +2,7 @@ package app.specy.rars;
 
 import app.specy.rars.assembler.TokenList;
 import app.specy.rars.assembler.SourceLine;
+import app.specy.rars.assembler.Symbol;
 import app.specy.rars.riscv.InstructionSet;
 import app.specy.rars.riscv.fs.MemoryFileSystem;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
@@ -151,7 +152,8 @@ public class RARS {
 
     public String getLabelAtAddress(int address){
         requireAssembled();
-        return this.main.getLocalSymbolTable().getSymbolGivenIntAddress(address).getName();
+        Symbol symbol = this.main.getLocalSymbolTable().getSymbolGivenIntAddressLocalOrGlobal(address);
+        return (symbol == null) ? null : symbol.getName();
     }
 
     public Simulator.Reason simulate(int[] breakpoints) throws SimulationException {
