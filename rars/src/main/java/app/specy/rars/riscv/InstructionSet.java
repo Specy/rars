@@ -434,18 +434,24 @@ public class InstructionSet {
         instructionList.add(new SB());
         instructionList.add(new SH());
         instructionList.add(new SLL());
-        instructionList.add(new SLLI());
-
+        // `slli`, `srli` and `srai` name a different operation on each width: on rv32 they shift the
+        // 32 bit register, on rv64 all 64 bits of it, and the shift amount is 6 bits wide there
+        // rather than 5. The rv64 forms registered further down already cover amounts 0 to 63, so
+        // adding these alongside them would shadow them for every amount below 32 and shift only the
+        // low half, sign extending the result. That is what `slliw`, `srliw` and `sraiw` are for.
+        if (!rv64) {
+            instructionList.add(new SLLI());
+            instructionList.add(new SRAI());
+            instructionList.add(new SRLI());
+        }
 
         instructionList.add(new SLT());
         instructionList.add(new SLTI());
         instructionList.add(new SLTIU());
         instructionList.add(new SLTU());
         instructionList.add(new SRA());
-        instructionList.add(new SRAI());
 
         instructionList.add(new SRL());
-        instructionList.add(new SRLI());
         instructionList.add(new SUB());
         instructionList.add(new SW());
         instructionList.add(new URET());

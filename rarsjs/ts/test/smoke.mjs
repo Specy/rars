@@ -146,6 +146,53 @@ for (const is64Bit of [false, true]) {
     console.log(`ok - ${label}: ran ${steps} instructions, printed "${output.join('')}", stopped on ${StopReason[reason]}`)
 }
 
+// `slli`, `srli` and `srai` name a different operation on each width. On RV64 they shift all 64
+// bits and take a 6 bit shift amount; the 32 bit forms of the same mnemonics, which shift the low
+// half and sign extend, are `slliw`, `srliw` and `sraiw`. Registering both sets on RV64 let the
+// 32 bit one match every shift amount below 32, so `slli t1, t0, 31` returned the `slliw` answer
+// and `li` of any constant wider than 32 bits truncated, since `li` expands to these shifts.
+const shiftProgram = `
+    .text
+    .globl main
+main:
+    li   t0, 1
+    slli t1, t0, 31         # all 64 bits: 0x0000000080000000
+    slliw t2, t0, 31        # the 32 bit form, sign extended: 0xFFFFFFFF80000000
+    li   t3, 0x1122334455667788
+    srli t4, t3, 8          # 0x0011223344556677
+    li   t5, -256
+    srai t6, t5, 4          # 0xFFFFFFFFFFFFFFF0
+    li   a7, 10
+    ecall
+`
+
+RISCV.setIs64Bit(true)
+const shifts = makeSingleFileRiscV(shiftProgram)
+registerHandlers(shifts, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+const shiftAssembled = shifts.assemble()
+assert.equal(shiftAssembled.hasErrors, false, `shift program failed to assemble: ${shiftAssembled.report}`)
+shifts.initialize(true)
+{
+    let steps = 0
+    while (!shifts.terminated && steps < 10_000) {
+        await shifts.step()
+        steps++
+    }
+    assert.ok(shifts.terminated, 'shift program did not terminate')
+}
+// The single-register accessor hands back a raw Java BigInteger that BigInt() cannot read; the
+// array form yields values it can, which is how the editor reads the 64 bit file too.
+const shiftRegisters = Array.from(shifts.getRegistersValuesLong(), value => BigInt(value))
+const shiftValue = name =>
+    BigInt.asUintN(64, shiftRegisters[packageExports.RISCV_REGISTERS.indexOf(name)])
+assert.equal(shiftValue('t1'), 0x0000000080000000n, 'RV64 slli must shift all 64 bits')
+assert.equal(shiftValue('t2'), 0xFFFFFFFF80000000n, 'slliw must shift 32 bits and sign extend')
+assert.equal(shiftValue('t3'), 0x1122334455667788n, 'li must keep a constant wider than 32 bits')
+assert.equal(shiftValue('t4'), 0x0011223344556677n, 'RV64 srli must shift all 64 bits')
+assert.equal(shiftValue('t6'), 0xFFFFFFFFFFFFFFF0n, 'RV64 srai must shift all 64 bits')
+RISCV.setIs64Bit(false)
+console.log('ok - RV64 immediate shifts operate on all 64 bits')
+
 assert.ok(RISCV.getInstructionSet().length > 0, 'instruction set should not be empty')
 
 // Multi-file construction: one immutable virtual source tree, rooted at the entry file.
