@@ -3,11 +3,15 @@ package app.specy.rars.simulator;
 import app.specy.rars.Globals;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.Instruction;
+import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.Settings;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -57,7 +61,22 @@ public class BackStepper {
         CONTROL_AND_STATUS_REGISTER_BACKDOOR,
         FLOATING_POINT_REGISTER_RESTORE,
         DO_NOTHING,
-        CONTROL_AND_STATUS_COUNTERS_DECREMENT
+        CONTROL_AND_STATUS_COUNTERS_DECREMENT,
+        /**
+         * Restores one control and status register through the register's own setValue. It exists
+         * because neither of the two restores above is the inverse of the host's CSR setter:
+         * CONTROL_AND_STATUS_REGISTER_RESTORE refuses a read only register, so it could never put
+         * `cycle` back, and CONTROL_AND_STATUS_REGISTER_BACKDOOR writes the register's own field,
+         * so it would leave a linked register (`fflags`, `cycleh`) holding a value while the base
+         * it aliases kept the poked one. Only a poke records this action.
+         */
+        CONTROL_AND_STATUS_REGISTER_POKE_RESTORE,
+        /**
+         * One whole poke, however many values it wrote: the entry carries its restores itself
+         * rather than taking a stack slot per value, so that a poke costs one slot of the history
+         * capacity and can never be evicted in part.
+         */
+        POKE
     }
 
     // Flag to mark BackStep object as prepresenting specific situation: user manipulates
@@ -71,6 +90,44 @@ public class BackStepper {
 
     private boolean engaged;
     private final BackstepStack backSteps;
+
+    /*
+     * A poke - a register or memory value written by the host between two instructions - is one
+     * entry of this same history, undone by one backStep() like an instruction, and one slot of its
+     * capacity however many values it wrote. While a transaction is open the restores the
+     * simulator's own write paths record are collected in pokeRestores instead of being pushed, and
+     * endPoke() pushes them as a single POKE entry; backStep() then applies them in reverse.
+     * Pushing one slot per value would make a long memory poke evict the instructions before it
+     * and, worse, let the poke be half evicted: undoable only in part while the entry reporting it
+     * still claimed to hold every write.
+     *
+     * The entry carries a group key of its own, negative and distinct per transaction, so that it
+     * is never an instruction address - a poke entry also keeps pc == NOT_PC_VALUE, so backStep()
+     * restores no program counter for it - and so that the finished writes a caller remembers can
+     * be matched to the entry that still holds them.
+     *
+     * The counter is static so that a key is never reused within a session: reassembling builds a
+     * fresh BackStepper, and a per-instance counter would hand the new stack keys that a caller may
+     * still be holding poke records under.
+     */
+    private static final int NO_POKE_GROUP = 0;
+    private static int nextPokeGroup = -2;
+    private int pokeGroup = NO_POKE_GROUP;
+    /** The open transaction's restores, oldest first. */
+    private List<PokeRestore> pokeRestores;
+
+    /** One value a poke overwrote, and how to put it back. */
+    private static final class PokeRestore {
+        private final Action action;
+        private final int param1;
+        private final long param2;
+
+        private PokeRestore(Action action, int param1, long param2) {
+            this.action = action;
+            this.param1 = param1;
+            this.param2 = param2;
+        }
+    }
 
     // One can argue using java.util.Stack, given its clumsy implementation.
     // A homegrown linked implementation will be more streamlined, but
@@ -134,7 +191,7 @@ public class BackStepper {
     // Use a do-while loop based on the backstep's program statement reference.
     public void backStep() {
         if (engaged && !backSteps.empty()) {
-            ProgramStatement statement = backSteps.peek().ps;
+            BackStep first = backSteps.peek();
             engaged = false; // GOTTA DO THIS SO METHOD CALL IN SWITCH WILL NOT RESULT IN NEW ACTION ON STACK!
             do {
                 BackStep step = backSteps.pop();
@@ -147,51 +204,163 @@ public class BackStepper {
                     RegisterFile.setProgramCounter(step.pc);
                 }
                 try {
-                    switch (step.action) {
-                        case MEMORY_RESTORE_RAW_WORD:
-                            Globals.memory.setRawWord(step.param1, (int)step.param2);
-                            break;
-                        case MEMORY_RESTORE_DOUBLE_WORD:
-                            Globals.memory.setDoubleWord(step.param1, step.param2);
-                            break;
-                        case MEMORY_RESTORE_WORD:
-                            Globals.memory.setWord(step.param1, (int)step.param2);
-                            break;
-                        case MEMORY_RESTORE_HALF:
-                            Globals.memory.setHalf(step.param1, (int)step.param2);
-                            break;
-                        case MEMORY_RESTORE_BYTE:
-                            Globals.memory.setByte(step.param1, (int)step.param2);
-                            break;
-                        case REGISTER_RESTORE:
-                            RegisterFile.updateRegister(step.param1, step.param2);
-                            break;
-                        case FLOATING_POINT_REGISTER_RESTORE:
-                            FloatingPointRegisterFile.updateRegisterLong(step.param1,step.param2);
-                            break;
-                        case CONTROL_AND_STATUS_REGISTER_RESTORE:
-                            ControlAndStatusRegisterFile.updateRegister(step.param1,step.param2);
-                            break;
-                        case CONTROL_AND_STATUS_REGISTER_BACKDOOR:
-                            ControlAndStatusRegisterFile.updateRegisterBackdoor(step.param1,step.param2);
-                            break;
-                        case PC_RESTORE:
-                            RegisterFile.setProgramCounter(step.param1);
-                            break;
-                        case CONTROL_AND_STATUS_COUNTERS_DECREMENT:
-                            ControlAndStatusRegisterFile.decrementCounters();
-                            break;
-                        case DO_NOTHING:
-                            break;
+                    if (step.action == Action.POKE) {
+                        // Newest write first, so that a value the poke wrote twice comes back to
+                        // what it held before the first of those writes.
+                        for (int i = step.pokeRestores.length - 1; i >= 0; i--) {
+                            PokeRestore restore = step.pokeRestores[i];
+                            applyRestore(restore.action, restore.param1, restore.param2);
+                        }
+                    } else {
+                        applyRestore(step.action, step.param1, step.param2);
                     }
                 } catch (Exception e) {
                     // if the original action did not cause an exception this will not either.
                     System.out.println("Internal RARS error: address exception while back-stepping.");
                     throw new RuntimeException();
                 }
-            } while (!backSteps.empty() && statement == backSteps.peek().ps);
+            } while (!backSteps.empty() && sameGroup(first, backSteps.peek()));
             engaged = true;  // RESET IT (was disabled at top of loop -- see comment)
         }
+    }
+
+    /** Carries out one recorded restore. One back step holds one; a poke entry holds its writes. */
+    private static void applyRestore(Action action, int param1, long param2) throws AddressErrorException {
+        switch (action) {
+            case MEMORY_RESTORE_RAW_WORD:
+                Globals.memory.setRawWord(param1, (int) param2);
+                break;
+            case MEMORY_RESTORE_DOUBLE_WORD:
+                Globals.memory.setDoubleWord(param1, param2);
+                break;
+            case MEMORY_RESTORE_WORD:
+                Globals.memory.setWord(param1, (int) param2);
+                break;
+            case MEMORY_RESTORE_HALF:
+                Globals.memory.setHalf(param1, (int) param2);
+                break;
+            case MEMORY_RESTORE_BYTE:
+                Globals.memory.setByte(param1, (int) param2);
+                break;
+            case REGISTER_RESTORE:
+                RegisterFile.updateRegister(param1, param2);
+                break;
+            case FLOATING_POINT_REGISTER_RESTORE:
+                FloatingPointRegisterFile.updateRegisterLong(param1, param2);
+                break;
+            case CONTROL_AND_STATUS_REGISTER_RESTORE:
+                ControlAndStatusRegisterFile.updateRegister(param1, param2);
+                break;
+            case CONTROL_AND_STATUS_REGISTER_BACKDOOR:
+                ControlAndStatusRegisterFile.updateRegisterBackdoor(param1, param2);
+                break;
+            case CONTROL_AND_STATUS_REGISTER_POKE_RESTORE:
+                ControlAndStatusRegisterFile.updateRegisterDirectly(param1, param2);
+                break;
+            case PC_RESTORE:
+                RegisterFile.setProgramCounter(param1);
+                break;
+            case CONTROL_AND_STATUS_COUNTERS_DECREMENT:
+                ControlAndStatusRegisterFile.decrementCounters();
+                break;
+            case DO_NOTHING:
+                break;
+            case POKE:
+                break; // handled by the caller, which holds the writes
+        }
+    }
+
+    /**
+     * Whether two back steps are undone together by one {@link #backStep()} call, which is what
+     * makes them one entry of the history. Instruction steps are grouped by the statement they
+     * belong to, exactly as backStep() has always grouped them - two host writes made before
+     * anything ran share the null statement and so still group together. A poke is a single back
+     * step holding all of its writes, so it groups with nothing: not with the instruction below it,
+     * and not with the poke before it.
+     *
+     * @param one   a back step.
+     * @param other the back step below it on the stack.
+     * @return true if undoing one also undoes the other.
+     */
+    public static boolean sameGroup(BackStep one, BackStep other) {
+        if (one.isPoke() || other.isPoke()) {
+            return false;
+        }
+        return one.ps == other.ps;
+    }
+
+    /**
+     * Open a poke transaction: every restore recorded until {@link #endPoke()} is collected rather
+     * than pushed, and endPoke() pushes the lot as one back step, which one backStep() undoes as a
+     * unit and which costs one slot of the history. No instruction may execute while it is open.
+     *
+     * @return the group key given to this transaction.
+     * @throws IllegalStateException if a poke is already open.
+     */
+    public int beginPoke() {
+        if (pokeGroup != NO_POKE_GROUP) {
+            throw new IllegalStateException("A poke is already open");
+        }
+        if (nextPokeGroup >= NOT_PC_VALUE) { // wrapped past the negative side; start over
+            nextPokeGroup = -2;
+        }
+        pokeGroup = nextPokeGroup--;
+        pokeRestores = new ArrayList<>();
+        return pokeGroup;
+    }
+
+    /**
+     * Close the open poke transaction.
+     *
+     * @return true if it pushed the one back step the poke became; false if it had nothing to
+     * record, either because nothing was written or because recording is disabled, in which case
+     * the writes stand but cannot be undone.
+     * @throws IllegalStateException if no poke is open.
+     */
+    public boolean endPoke() {
+        if (pokeGroup == NO_POKE_GROUP) {
+            throw new IllegalStateException("No poke is open");
+        }
+        int group = pokeGroup;
+        List<PokeRestore> restores = pokeRestores;
+        // Cleared before the push, so that the push itself goes on the stack rather than back into
+        // the transaction it is closing.
+        pokeGroup = NO_POKE_GROUP;
+        pokeRestores = null;
+        if (restores.isEmpty()) {
+            return false;
+        }
+        backSteps.pushPoke(group, restores.toArray(new PokeRestore[0]));
+        return true;
+    }
+
+    /**
+     * Whether a poke transaction is open, so that the host's setters journal into it rather than
+     * writing straight through.
+     */
+    public boolean pokeOpen() {
+        return pokeGroup != NO_POKE_GROUP;
+    }
+
+    /**
+     * Record, into the open poke, that one control and status register held {@code value} before
+     * the host overwrote it. The host's CSR setter writes through the register's own setValue, a
+     * path no register file routes through the back stepper, so it says so itself.
+     *
+     * @param number The architectural CSR number, not a position in the file.
+     * @param value  The value the register held before the write.
+     * @throws IllegalStateException if no poke is open.
+     */
+    public void addPokeControlAndStatusRestore(int number, long value) {
+        if (pokeGroup == NO_POKE_GROUP) {
+            throw new IllegalStateException("No poke is open");
+        }
+        if (!engaged) {
+            return; // recording is off: the write stands, as every other write in this poke does
+        }
+        // The program counter is not read: push collects this into the open transaction, and a
+        // poke entry belongs to no instruction.
+        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_POKE_RESTORE, NOT_PC_VALUE, number, value);
     }
   
      
@@ -377,6 +546,27 @@ public class BackStepper {
         private ProgramStatement ps;   // statement whose action is being "undone" here
         private int param1;  // first parameter required by that action
         private long param2;  // optional second parameter required by that action
+        private int pokeGroup; // the poke transaction this step is, or 0 for an instruction's step
+        // A poke's restores, oldest first. They live in the entry rather than in a slot each, so
+        // that a poke of a hundred bytes is still one slot of the history and is never evicted in
+        // part. Null for an instruction's step.
+        private PokeRestore[] pokeRestores;
+
+        /**
+         * Whether this step is a whole poke - every value the host wrote in one transaction -
+         * rather than one effect of an instruction.
+         */
+        public boolean isPoke() {
+            return pokeGroup != NO_POKE_GROUP;
+        }
+
+        /**
+         * The key of the poke this step is, or 0 for an instruction's step. Two consecutive pokes
+         * have different keys, and no key is ever an instruction address.
+         */
+        public int getPokeGroup() {
+            return pokeGroup;
+        }
 
         // it is critical that BackStep object get its values by calling this method
         // rather than assigning to individual members, because of the technique used
@@ -384,6 +574,9 @@ public class BackStepper {
         private void assign(Action act, int programCounter, int parm1, long parm2) {
             action = act;
             pc = programCounter;
+            // Stack entries are recycled, so never inherit the last poke that used this slot.
+            pokeGroup = NO_POKE_GROUP;
+            pokeRestores = null;
             // Client does not have direct access to program statement, and rather than making all
             // of them go through the methods below to obtain it, we will do it here.
             // Want the program statement but do not want observers notified.
@@ -428,6 +621,20 @@ public class BackStepper {
          		                   " source "+((ps==null)? "none":ps.getSource())+
          								 " parm1 "+param1+" parm2 "+param2);
          */
+        }
+
+        // A poke belongs to no instruction: it keeps NOT_PC_VALUE so that undoing it leaves the
+        // program counter alone, and carries its transaction key instead, which tells it apart from
+        // the poke before it. Its restores travel with it, which is what makes the whole
+        // transaction one slot of the stack.
+        private void assignPoke(int group, PokeRestore[] restores) {
+            action = Action.POKE;
+            pc = NOT_PC_VALUE;
+            ps = null;
+            param1 = 0;
+            param2 = 0;
+            pokeGroup = group;
+            pokeRestores = restores;
         }
 
         public int getAction() {
@@ -496,7 +703,9 @@ public class BackStepper {
             return size == 0;
         }
 
-        private void push(Action act, int programCounter, int parm1, long parm2) {
+        // Moves the top onto the slot the next entry is written into, dropping the oldest entry
+        // once the stack is full.
+        private void advance() {
             if (size == 0) {
                 top = 0;
                 size++;
@@ -506,9 +715,27 @@ public class BackStepper {
             } else { // size == capacity.  The top moves up one, replacing oldest entry (goodbye!)
                 top = (top + 1) % capacity;
             }
+        }
+
+        private void push(Action act, int programCounter, int parm1, long parm2) {
+            // While a poke is open no instruction is running, so every recorded restore is one of
+            // its writes: it is collected rather than pushed, and the whole transaction is pushed
+            // as one entry by endPoke(), whichever write path each of them came through.
+            if (pokeGroup != NO_POKE_GROUP) {
+                pokeRestores.add(new PokeRestore(act, parm1, parm2));
+                return;
+            }
+            advance();
             // We'll re-use existing objects rather than create/discard each time.
             // Must use assign() method rather than series of assignment statements!
             stack[top].assign(act, programCounter, parm1, parm2);
+        }
+
+        // The one entry a finished poke becomes. It is pushed by endPoke(), after the transaction
+        // has been closed, so it takes the ordinary slot an instruction's step would.
+        private void pushPoke(int group, PokeRestore[] restores) {
+            advance();
+            stack[top].assignPoke(group, restores);
         }
 
         private void push(Action act, int programCounter, int parm1) {

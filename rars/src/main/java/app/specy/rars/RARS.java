@@ -196,6 +196,15 @@ public class RARS {
         return this.main;
     }
 
+    /**
+     * Whether a program has assembled successfully, so that {@link #getProgram()} answers rather
+     * than throwing. A host setter that only wants the back stepper when there is one asks this
+     * instead of catching the failure.
+     */
+    public boolean isAssembled() {
+        return assembled;
+    }
+
     public static InstructionSet getInstructionSet() {
         if(Globals.instructionSet == null) {
             initializeRISCV();

@@ -165,6 +165,27 @@ public class ControlAndStatusRegisterFile {
     }
 
     /**
+     * Writes one register through the register's own setValue, whatever kind of register it is:
+     * a linked register writes the register it aliases, a masked register keeps the bits it does
+     * not own, and a read only register is written anyway, because the caller is the host and not
+     * the program. Records no undo entry of its own.
+     *
+     * This is the write the host's CSR setter makes, and so the restore that undoes it. Neither
+     * {@link #updateRegister(int, long)}, which refuses a read only register, nor
+     * {@link #updateRegisterBackdoor(int, long)}, which writes a linked register's own field
+     * instead of the base it aliases, is that inverse.
+     *
+     * @param num Number of register to set the value of.
+     * @param val The desired value for the register.
+     **/
+    public static void updateRegisterDirectly(int num, long val) {
+        settleCounters();
+        Register register = instance.getRegister(num);
+        if (register == null) return;
+        register.setValue(val);
+    }
+
+    /**
      * ORs a register with a value
      *
      * @param num Number of register to change

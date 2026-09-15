@@ -9,11 +9,13 @@ import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.simulator.BackStepper;
 import app.specy.rars.simulator.Simulator;
 import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.JSProperty;
+import org.teavm.jso.core.JSArray;
 import org.teavm.jso.core.JSFunction;
 import org.teavm.jso.core.JSNumber;
 import org.teavm.jso.core.JSPromise;
@@ -23,7 +25,12 @@ import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class JsRiscV {
     private RARS main;
@@ -141,17 +148,42 @@ public class JsRiscV {
         }
     }
 
-    private static JSPromise<JSNumber> run(Body body) {
-        return JSPromise.create((resolve, reject) -> submit(() -> {
-            int result;
-            try {
-                result = body.run();
-            } catch (Throwable t) {
-                reject.accept(JSExceptions.getJSException(t));
-                return;
+    /*
+     * How many step/simulate calls of THIS core are in flight. A task is counted from the moment it
+     * is submitted until its body returns, which includes the time the coroutine spends parked on
+     * an IO handler's promise: the simulator's state is half-written then, so a poke must be
+     * refused. The count is per instance, not static: a host builds throwaway cores (the editor
+     * assembles one to check the source), and a step on one of those must not refuse a poke on
+     * another.
+     */
+    private int executingInstructions;
+
+    private JSPromise<JSNumber> run(Body body) {
+        executingInstructions++;
+        boolean submitted = false;
+        try {
+            JSPromise<JSNumber> promise = JSPromise.create((resolve, reject) -> submit(() -> {
+                int result;
+                try {
+                    result = body.run();
+                } catch (Throwable t) {
+                    reject.accept(JSExceptions.getJSException(t));
+                    return;
+                } finally {
+                    // Exactly once, on every path out of the body, so that a failed step cannot
+                    // leave the core refusing pokes for the rest of the session.
+                    executingInstructions--;
+                }
+                resolve.accept(JSNumber.valueOf(result));
+            }));
+            submitted = true;
+            return promise;
+        } finally {
+            if (!submitted) {
+                // The task never reached the queue, so its body will never run the decrement.
+                executingInstructions--;
             }
-            resolve.accept(JSNumber.valueOf(result));
-        }));
+        }
     }
 
     @JSExport
@@ -308,8 +340,9 @@ public class JsRiscV {
     }
 
     /**
-     * Writes one floating point register directly, bypassing the back stepper: a value the host
-     * presets is not something the program did, so it must not become an undo entry.
+     * Writes one floating point register. Outside a poke the write is direct, bypassing the back
+     * stepper: a value the host presets is not something the program did, so it must not become an
+     * undo entry. Inside a poke it joins the open transaction.
      *
      * @param index Position in the order getFloatingPointRegistersValues() returns, 0 to 31.
      */
@@ -319,7 +352,20 @@ public class JsRiscV {
         if (index < 0 || index >= registers.length) {
             throw new IllegalArgumentException("Floating point register index out of range: " + index);
         }
-        registers[index].setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
+        Register target = registers[index];
+        long value = ((long) high << 32) | (low & 0xFFFFFFFFL);
+        if (openPoke == null) {
+            target.setValue(value);
+            return;
+        }
+        long old = target.getValueNoNotify();
+        if (old == value) {
+            return; // unchanged: nothing to journal and nothing to undo
+        }
+        journalRegister(target, old);
+        // The register file's own write path, so the back stepper records the restore; a poke is
+        // open, so it lands in that transaction rather than on the stack.
+        FloatingPointRegisterFile.updateRegisterLong(target.getNumber(), value);
     }
 
     /**
@@ -342,10 +388,11 @@ public class JsRiscV {
     }
 
     /**
-     * Writes one control and status register directly, bypassing the back stepper, through the
-     * register's own setValue: a linked register writes the register it aliases, a masked register
-     * keeps the bits it does not own, and a read only register is written as the back door does,
-     * because the host is not the program.
+     * Writes one control and status register through the register's own setValue: a linked register
+     * writes the register it aliases, a masked register keeps the bits it does not own, and a read
+     * only register is written as the back door does, because the host is not the program. Outside
+     * a poke the write records no undo entry; inside one it joins the open transaction, which
+     * remembers the register's own value so that undoing the poke writes it back the same way.
      *
      * @param index Position in the order getControlAndStatusRegistersValues() returns, 0 to 16.
      */
@@ -355,12 +402,260 @@ public class JsRiscV {
         if (index < 0 || index >= registers.length) {
             throw new IllegalArgumentException("Control and status register index out of range: " + index);
         }
-        registers[index].setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
+        Register target = registers[index];
+        long value = ((long) high << 32) | (low & 0xFFFFFFFFL);
+        if (openPoke == null) {
+            target.setValue(value);
+            return;
+        }
+        long old = target.getValueNoNotify();
+        if (old == value) {
+            return;
+        }
+        journalRegister(target, old);
+        // No register file routes this write through the back stepper, so the transaction is told
+        // about it directly, by the architectural CSR number the restore will look the register up
+        // by.
+        this.main.getProgram().getBackStepper().addPokeControlAndStatusRestore(target.getNumber(), old);
+        target.setValue(value);
     }
 
+    /**
+     * The raw back step stack, newest first: one element per recorded step. An instruction occupies
+     * one to three of them, a poke exactly one, whatever it wrote - the element with `isPoke` set,
+     * which is what tells a poke apart from a host write made before anything ran, since both carry
+     * pc -1. Use getUndoGroups() to read the history the way undo() pops it.
+     */
     @JSExport
-    public JsBackStep[] getUndoStack() {
-        return Arrays.stream(this.main.getProgram().getBackStepper().getBackStepsStack().getStack()).map(JsBackStep::new).toArray(JsBackStep[]::new);
+    public JSArray<JSObject> getUndoStack() {
+        BackStepper.BackStep[] stack = this.main.getProgram().getBackStepper().getBackStepsStack().getStack();
+        JSArray<JSObject> steps = JSArray.create(stack.length);
+        for (int i = 0; i < stack.length; i++) {
+            steps.set(i, JsBackStep.of(stack[i]));
+        }
+        return steps;
+    }
+
+    /**
+     * The same history as getUndoStack(), grouped the way undo() pops it: one entry per executed
+     * instruction or per poke, newest first. An instruction that records several back steps - a
+     * `jal` restoring both `ra` and the program counter, and the counter decrement every
+     * instruction pushes - is one entry, and so is a poke, which is one back step to begin with.
+     */
+    @JSExport
+    public JSArray<JSObject> getUndoGroups() {
+        BackStepper.BackStep[] stack = this.main.getProgram().getBackStepper().getBackStepsStack().getStack();
+        List<JSObject> groups = new ArrayList<>();
+        Set<Integer> livePokeGroups = new HashSet<>();
+        int start = 0;
+        while (start < stack.length) {
+            int end = start + 1;
+            while (end < stack.length && BackStepper.sameGroup(stack[end - 1], stack[end])) {
+                end++;
+            }
+            JSArray<JSObject> steps = JSArray.create(end - start);
+            for (int i = start; i < end; i++) {
+                steps.set(i - start, JsBackStep.of(stack[i]));
+            }
+            if (stack[start].isPoke()) {
+                int group = stack[start].getPokeGroup();
+                livePokeGroups.add(group);
+                groups.add(JsUndoGroup.poke(POKE_PC, steps, writesOfPoke(group)));
+            } else {
+                groups.add(JsUndoGroup.instruction(stack[start].getPc(), steps));
+            }
+            start = end;
+        }
+        // A poke whose entry has fallen off the circular stack can never be reported again.
+        forgetPokeRecordsOtherThan(livePokeGroups);
+        JSArray<JSObject> result = JSArray.create(groups.size());
+        for (int i = 0; i < groups.size(); i++) {
+            result.set(i, groups.get(i));
+        }
+        return result;
+    }
+
+    /*
+     * Pokes.
+     *
+     * A poke is a register or memory value the host changes between two instructions: one entry of
+     * this same history, undone by one undo(). beginPoke() opens a transaction; until endPoke() the
+     * setters write through the simulator's own paths, so the back stepper records what they
+     * changed into that transaction, and they journal here what the value was, so that the entry
+     * can say what it changed. Outside a transaction every setter is direct and records nothing,
+     * which is what presetting a testcase needs.
+     */
+
+    /** The pc a poke reports: it belongs to no instruction, so it has no address of its own. */
+    private static final int POKE_PC = -1;
+
+    /*
+     * Finished pokes are remembered here so that getUndoGroups() can report what they changed long
+     * after the writes happened. Only a poke still on the back step stack can be reported, so the
+     * list is pruned whenever the groups are read, and capped for the case where they never are.
+     */
+    private static final int MAX_POKE_RECORDS = 1024;
+
+    private PokeJournal openPoke;
+    private final List<PokeRecord> pokeRecords = new ArrayList<>();
+
+    /**
+     * Opens a poke transaction. Every write made by the setters until endPoke() becomes part of one
+     * history entry, restored as a unit by one undo().
+     *
+     * @throws IllegalStateException if a poke is already open, or if an instruction is executing.
+     */
+    @JSExport
+    public void beginPoke() {
+        if (executingInstructions > 0) {
+            throw new IllegalStateException("Cannot begin a poke while an instruction is executing");
+        }
+        if (openPoke != null) {
+            throw new IllegalStateException("A poke is already open");
+        }
+        openPoke = new PokeJournal(this.main.getProgram().getBackStepper().beginPoke());
+    }
+
+    /**
+     * Closes the open poke transaction.
+     *
+     * @return true if it recorded one history entry, false if it wrote nothing - or if undo is
+     * disabled, in which case the writes stand but cannot be undone.
+     * @throws IllegalStateException if no poke is open.
+     */
+    @JSExport
+    public boolean endPoke() throws AddressErrorException {
+        if (openPoke == null) {
+            throw new IllegalStateException("No poke is open");
+        }
+        PokeJournal journal = openPoke;
+        openPoke = null;
+        if (!this.main.getProgram().getBackStepper().endPoke()) {
+            return false;
+        }
+        pokeRecords.add(new PokeRecord(journal.group, buildWrites(journal)));
+        while (pokeRecords.size() > MAX_POKE_RECORDS) {
+            pokeRecords.remove(0);
+        }
+        return true;
+    }
+
+    /** Whether a poke transaction is open, so that the setters journal instead of writing through. */
+    @JSExport
+    public boolean pokeOpen() {
+        return openPoke != null;
+    }
+
+    private BackStepper backStepper() {
+        return this.main.isAssembled() ? this.main.getProgram().getBackStepper() : null;
+    }
+
+    private void journalRegister(Register register, long oldValue) {
+        // The first write to a register in the transaction holds the value to restore; a later one
+        // overwrites a value the poke itself put there.
+        if (openPoke.registersByName.containsKey(register.getName())) {
+            return;
+        }
+        PokeRegisterWrite write = new PokeRegisterWrite(register, oldValue);
+        openPoke.registersByName.put(register.getName(), write);
+        openPoke.registers.add(write);
+    }
+
+    private void journalMemory(int address, int oldByte) {
+        // As for a register, the first write to an address holds the value to restore.
+        Long key = address & 0xffffffffL;
+        if (!openPoke.memoryOldBytes.containsKey(key)) {
+            openPoke.memoryOldBytes.put(key, oldByte);
+        }
+    }
+
+    /**
+     * What the poke changed: every register it wrote, in the order it wrote them, then every run of
+     * consecutive memory addresses it wrote, by ascending address. The new values are read now, at
+     * the end of the transaction, so a value the poke wrote twice reports only its final state.
+     */
+    private static JSArray<JSObject> buildWrites(PokeJournal journal) throws AddressErrorException {
+        List<JSObject> writes = new ArrayList<>();
+        for (PokeRegisterWrite register : journal.registers) {
+            writes.add(JsPokeWrite.register(register.register.getName(), register.oldValue,
+                    register.register.getValueNoNotify()));
+        }
+        List<Long> addresses = new ArrayList<>(journal.memoryOldBytes.keySet());
+        Collections.sort(addresses); // unsigned order: the keys are addresses widened to long
+        int runStart = 0;
+        while (runStart < addresses.size()) {
+            int runEnd = runStart + 1;
+            while (runEnd < addresses.size()
+                    && addresses.get(runEnd).longValue() == addresses.get(runEnd - 1).longValue() + 1) {
+                runEnd++;
+            }
+            int[] oldBytes = new int[runEnd - runStart];
+            int[] newBytes = new int[runEnd - runStart];
+            for (int i = runStart; i < runEnd; i++) {
+                int address = (int) (long) addresses.get(i);
+                oldBytes[i - runStart] = journal.memoryOldBytes.get(addresses.get(i));
+                newBytes[i - runStart] = Globals.memory.getByteNoNotify(address) & 0xff;
+            }
+            writes.add(JsPokeWrite.memory((int) (long) addresses.get(runStart), oldBytes, newBytes));
+            runStart = runEnd;
+        }
+        JSArray<JSObject> result = JSArray.create(writes.size());
+        for (int i = 0; i < writes.size(); i++) {
+            result.set(i, writes.get(i));
+        }
+        return result;
+    }
+
+    private JSArray<JSObject> writesOfPoke(int group) {
+        for (PokeRecord record : pokeRecords) {
+            if (record.group == group) {
+                return record.writes;
+            }
+        }
+        return JSArray.create(0);
+    }
+
+    private void forgetPokeRecordsOtherThan(Set<Integer> livePokeGroups) {
+        for (int i = pokeRecords.size() - 1; i >= 0; i--) {
+            if (!livePokeGroups.contains(pokeRecords.get(i).group)) {
+                pokeRecords.remove(i);
+            }
+        }
+    }
+
+    /** One register the open poke has written, with the value to put back. */
+    private static final class PokeRegisterWrite {
+        final Register register;
+        final long oldValue;
+
+        PokeRegisterWrite(Register register, long oldValue) {
+            this.register = register;
+            this.oldValue = oldValue;
+        }
+    }
+
+    /** What the open poke has written so far. */
+    private static final class PokeJournal {
+        final int group;
+        final List<PokeRegisterWrite> registers = new ArrayList<>();
+        final Map<String, PokeRegisterWrite> registersByName = new HashMap<>();
+        /** Old byte per written address, the address widened to an unsigned long. */
+        final Map<Long, Integer> memoryOldBytes = new HashMap<>();
+
+        PokeJournal(int group) {
+            this.group = group;
+        }
+    }
+
+    /** A finished poke, kept for as long as its entry is on the back step stack. */
+    private static final class PokeRecord {
+        final int group;
+        final JSArray<JSObject> writes;
+
+        PokeRecord(int group, JSArray<JSObject> writes) {
+            this.group = group;
+            this.writes = writes;
+        }
     }
 
     @JSExport
@@ -376,8 +671,37 @@ public class JsRiscV {
 
     @JSExport
     public void setMemoryBytes(int address, int[] bytes) throws AddressErrorException {
-        for (int i = 0; i < bytes.length; i++) {
-            Globals.memory.setByte(address + i, bytes[i]);
+        if (openPoke != null) {
+            for (int i = 0; i < bytes.length; i++) {
+                int at = address + i;
+                int old = Globals.memory.getByteNoNotify(at) & 0xff;
+                if (old == (bytes[i] & 0xff)) {
+                    continue; // unchanged: no write, no notification, nothing to undo
+                }
+                journalMemory(at, old);
+                // The ordinary store, so observers hear it; the back stepper is open on a poke, so
+                // the restore it records joins that poke rather than the last instruction's group.
+                Globals.memory.setByte(at, bytes[i]);
+            }
+            return;
+        }
+        // A host write outside a poke is not a step: it writes the way the program does, so that a
+        // memory mapped display still repaints, but records nothing. Left recording, each byte
+        // would push a back step under the last executed instruction's address and the next undo
+        // would revert the host's write together with that instruction.
+        BackStepper backStepper = backStepper();
+        boolean recording = backStepper != null && backStepper.enabled();
+        if (recording) {
+            backStepper.setEnabled(false);
+        }
+        try {
+            for (int i = 0; i < bytes.length; i++) {
+                Globals.memory.setByte(address + i, bytes[i]);
+            }
+        } finally {
+            if (recording) {
+                backStepper.setEnabled(true);
+            }
         }
     }
 
@@ -529,9 +853,28 @@ public class JsRiscV {
         return RARS.getInstructionSet().getInstructionList().stream().map(JsInstruction::new).toArray(JsInstruction[]::new);
     }
 
+    /**
+     * Writes one general register. Outside a poke the write is direct, bypassing the back stepper;
+     * inside a poke it joins the open transaction. `zero` is not writable inside a poke: it holds
+     * no value, so there would be nothing for undo to restore.
+     */
     @JSExport
     public void setRegisterValue(String register, int high, int low) {
-        RegisterFile.getRegister(register).setValue(((long) high << 32) | (low & 0xFFFFFFFFL));
+        Register target = RegisterFile.getRegister(register);
+        long value = ((long) high << 32) | (low & 0xFFFFFFFFL);
+        if (openPoke == null) {
+            target.setValue(value);
+            return;
+        }
+        if (target.getNumber() == 0) {
+            return;
+        }
+        long old = target.getValueNoNotify();
+        if (old == value) {
+            return;
+        }
+        journalRegister(target, old);
+        RegisterFile.updateRegister(target.getNumber(), value);
     }
 
     @JSProperty

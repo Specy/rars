@@ -15,6 +15,7 @@ const packageExports = await import(dist)
 const {
     RISCV, makeRiscVFromFiles, registerHandlers, unimplementedHandler, StopReason,
     RISCV_FLOATING_POINT_REGISTERS, RISCV_CSR_REGISTERS, bigintToHighLow, highLowToBigint,
+    BackStepAction, RISCV_REGISTERS,
 } = packageExports
 
 const makeSingleFileRiscV = source => makeRiscVFromFiles({ 'main.asm': source }, 'main.asm')
@@ -658,3 +659,409 @@ assert.equal(readRegisterFile(fpu64.getControlAndStatusRegistersValues()).length
 RISCV.setIs64Bit(false)
 
 console.log(`ok - register files: ft0=${fp[0].toString(16)}, ft1=${fp[1].toString(16)}, instret=${csrByName('instret')}`)
+
+// ---------------------------------------------------------------------------
+// Pokes: a register or memory value the host changes between two instructions, recorded in this
+// same history as a step of its own and undone by the core itself.
+// ---------------------------------------------------------------------------
+
+const POKE_SOURCE = `
+    .data
+buf:    .word 0x11223344
+        .word 0x55667788
+
+    .text
+    .globl main
+main:
+    li   t0, 1
+    li   t1, 2
+    add  t2, t0, t1
+    li   t3, 4
+    li   a7, 10
+    ecall
+`
+
+// `.data` starts here, so `buf` is the first word of it; the peripheral section above relies on
+// the same base address.
+const POKE_DATA = 0x10010000
+
+// The undo capacity is a global of the simulator and the stack is built at assembly, so every
+// program here states the capacity it wants rather than inheriting the one the last test chose.
+const makePokeProgram = (undoSize = 1000) => {
+    const program = makeSingleFileRiscV(POKE_SOURCE)
+    registerHandlers(program, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    program.setUndoSize(undoSize)
+    const assembled = program.assemble()
+    assert.equal(assembled.hasErrors, false, `poke assembly failed: ${assembled.report}`)
+    program.initialize(true)
+    return program
+}
+
+const stepTimes = async (program, count) => {
+    for (let i = 0; i < count; i++) await program.step()
+}
+
+const csrOf = program => {
+    const values = readRegisterFile(program.getControlAndStatusRegistersValues())
+    return name => values[RISCV_CSR_REGISTERS.indexOf(name)]
+}
+
+RISCV.setIs64Bit(false)
+
+// 1. The transaction API.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 2)
+
+    assert.equal(program.pokeOpen(), false, 'no poke is open to begin with')
+    assert.throws(() => program.endPoke(), /No poke is open/, 'endPoke with none open throws')
+
+    program.beginPoke()
+    assert.equal(program.pokeOpen(), true)
+    assert.throws(() => program.beginPoke(), /already open/, 'beginPoke inside a poke throws')
+    assert.equal(program.endPoke(), false, 'a poke that wrote nothing records nothing')
+    assert.equal(program.pokeOpen(), false)
+    assert.throws(() => program.endPoke(), /No poke is open/, 'the transaction really closed')
+
+    // An instruction is in flight from the moment step() is called until its promise settles, and
+    // the simulator's state is half written in between.
+    const inFlight = program.step()
+    assert.throws(() => program.beginPoke(), /while an instruction is executing/,
+        'beginPoke during an instruction throws')
+    await inFlight
+    program.beginPoke()
+    assert.equal(program.pokeOpen(), true, 'the guard clears once the instruction has finished')
+    program.endPoke()
+}
+
+// 2. Outside a transaction the setters stay direct and record nothing, which testcase presets
+//    rely on; inside one they journal.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+
+    const observed = []
+    const handle = program.addMemoryWriteObserver(POKE_DATA, POKE_DATA + 4,
+        (address, length, value) => observed.push([address, length, value]))
+
+    const stackBefore = program.getUndoStack().length
+    const groupsBefore = program.getUndoGroups().length
+    assert.ok(stackBefore > 0, 'the executed instructions should have recorded entries')
+
+    program.setRegisterValue('s1', 0, 0x1234)
+    program.setFloatingPointRegisterValue(2, 0, 0x99)
+    program.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('uscratch'), 0, 0x77)
+    program.setMemoryBytes(POKE_DATA, [0xAA, 0xBB])
+
+    assert.equal(program.getUndoStack().length, stackBefore, 'a setter outside a poke records nothing')
+    assert.equal(program.getUndoGroups().length, groupsBefore, 'and adds no history entry')
+    // A host write is still a write as far as a memory mapped display is concerned.
+    assert.deepEqual(observed, [[POKE_DATA, 1, 0xAA], [POKE_DATA + 1, 1, 0xBB]],
+        'a host write outside a poke still notifies write observers')
+
+    // The next undo reverts the instruction and nothing else: before this change each host byte
+    // pushed a back step under the last instruction's address and went back with it.
+    program.undo()
+    assert.deepEqual(Array.from(program.readMemoryBytes(POKE_DATA, 2)), [0xAA, 0xBB],
+        'undoing an instruction must not revert a host write made outside a poke')
+    assert.equal(program.getRegisterValue('s1'), 0x1234, 'nor a host register write')
+
+    program.removeMemoryObserver(handle)
+}
+
+// 3. A write that changes nothing journals nothing, and endPoke says so.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    const stackBefore = program.getUndoStack().length
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 3) // t2 already holds 1 + 2
+    program.setMemoryBytes(POKE_DATA, [0x44, 0x33]) // the bytes already there
+    program.setFloatingPointRegisterValue(0, 0, 0)  // still zero
+    program.setRegisterValue('zero', 0, 5)          // zero holds nothing to restore
+    assert.equal(program.endPoke(), false, 'writing the values already held records no entry')
+    assert.equal(program.getUndoStack().length, stackBefore, 'and takes no slot of the history')
+    assert.equal(program.getRegisterValue('zero'), 0, 'zero stays zero')
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 3)
+    program.setRegisterValue('t2', 0, 9) // this one does change it
+    assert.equal(program.endPoke(), true, 'one changed value is enough for an entry')
+    assert.equal(program.getRegisterValue('t2'), 9)
+}
+
+// 4. The entry: kind, and a writes list with old AND new values.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    const statements = Array.from(program.getCompiledStatements())
+
+    assert.deepEqual(Array.from(program.readMemoryBytes(POKE_DATA, 4)), [0x44, 0x33, 0x22, 0x11],
+        'the data word is little endian, so the poke below writes its first two bytes')
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    program.setFloatingPointRegisterValue(RISCV_FLOATING_POINT_REGISTERS.indexOf('ft1'), 0x7FF00000, 0)
+    program.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('fcsr'), 0, 0x60)
+    program.setMemoryBytes(POKE_DATA, [1, 2])
+    program.setMemoryBytes(POKE_DATA + 6, [9]) // a second, non adjacent run
+    assert.equal(program.endPoke(), true)
+
+    const groups = Array.from(program.getUndoGroups())
+    const top = groups[0]
+    assert.equal(top.kind, 'poke', 'the newest entry is the poke')
+    assert.equal(top.pc, -1, 'a poke belongs to no instruction, so it has no address')
+    assert.equal(top.steps.length, 1, 'the whole poke is one back step')
+    assert.equal(top.steps[0].isPoke, true, 'and the raw stack says so too')
+    assert.equal(top.steps[0].action, BackStepAction.POKE)
+
+    // Registers in the order they were written, then each run of memory by ascending address.
+    // A 64 bit register value crosses as a signed decimal string, as getRegistersValuesLong does.
+    assert.deepEqual(Array.from(top.writes), [
+        { type: 'register', name: 't2', old: '3', new: '85' },
+        { type: 'register', name: 'ft1', old: '0', new: '9218868437227405312' },
+        { type: 'register', name: 'fcsr', old: '0', new: '96' },
+        { type: 'memory', address: POKE_DATA, old: [0x44, 0x33], new: [1, 2] },
+        { type: 'memory', address: POKE_DATA + 6, old: [0x66], new: [9] },
+    ], 'the entry reports every write with what was there and what is there now')
+
+    assert.equal(groups[1].kind, 'instruction', 'the entry below it is an instruction')
+    assert.equal(groups[1].pc, statements[2].address, 'named by the address it ran at')
+    assert.deepEqual(Array.from(groups[1].writes), [], 'only a poke reports writes')
+
+    // Entries, steps and writes are plain objects, so a history survives being cloned or
+    // serialized on its way to a panel.
+    assert.deepEqual(structuredClone(groups[0]), groups[0])
+    assert.equal(Array.isArray(program.getUndoGroups()), true)
+    assert.equal(Array.isArray(program.getUndoStack()), true)
+    assert.ok(JSON.stringify(program.getUndoGroups()).includes('"kind":"poke"'))
+
+    // The kind is never absent: every entry carries one, and every raw back step carries isPoke.
+    assert.ok(groups.every(group => group.kind === 'poke' || group.kind === 'instruction'))
+    assert.ok(Array.from(program.getUndoStack()).every(step => typeof step.isPoke === 'boolean'))
+
+    // A second poke, written twice to the same register: the old value is what the register held
+    // before this transaction, the new value what it holds at endPoke.
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x56)
+    program.setRegisterValue('t2', 0, 0x57)
+    assert.equal(program.endPoke(), true)
+    assert.deepEqual(Array.from(program.getUndoGroups())[0].writes, [
+        { type: 'register', name: 't2', old: '85', new: '87' },
+    ], 'a register written twice in one poke reports one write, first old to last new')
+}
+
+// 4b. A 64 bit register value is reported exactly, sign and all.
+{
+    RISCV.setIs64Bit(true)
+    const program = makePokeProgram()
+    await stepTimes(program, 1)
+    program.beginPoke()
+    program.setRegisterValue('t1', 0xFFFFFFFF | 0, 0xFFFFFFFE | 0)
+    assert.equal(program.endPoke(), true)
+    const write = Array.from(program.getUndoGroups())[0].writes[0]
+    assert.equal(write.new, '-2', 'a 64 bit value crosses as a signed decimal string')
+    assert.equal(BigInt.asUintN(64, BigInt(write.new)), 0xFFFFFFFFFFFFFFFEn,
+        'which reads back as the unsigned value highLowToBigint reports')
+    assert.equal(Array.from(program.getRegistersValuesLong())[RISCV_REGISTERS.indexOf('t1')], '-2',
+        'the same string the register file getter reports')
+    RISCV.setIs64Bit(false)
+}
+
+// 5. A poke sits in the same history as the instructions, at its position, taking one slot.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    const statements = Array.from(program.getCompiledStatements())
+    const stackBefore = program.getUndoStack().length
+
+    program.beginPoke()
+    program.setMemoryBytes(POKE_DATA, [1, 2, 3, 4, 5, 6, 7, 8])
+    assert.equal(program.endPoke(), true)
+    assert.equal(program.getUndoStack().length, stackBefore + 1,
+        'a poke of eight bytes is one slot of the history, not eight')
+
+    await program.step()
+
+    const groups = Array.from(program.getUndoGroups())
+    assert.deepEqual(groups.slice(0, 3).map(group => group.kind), ['instruction', 'poke', 'instruction'],
+        'newest first, with the poke between the instructions that surround it')
+    assert.equal(groups[0].pc, statements[3].address)
+    assert.equal(groups[2].pc, statements[2].address)
+    assert.equal(program.canUndo, true)
+}
+
+// 5b. One slot means a poke can be evicted whole, never in part.
+{
+    const program = makePokeProgram(2)
+    const firstBytes = () => Array.from(program.readMemoryBytes(POKE_DATA, 1))
+
+    program.beginPoke(); program.setMemoryBytes(POKE_DATA, [0xA0]); assert.equal(program.endPoke(), true)
+    program.beginPoke(); program.setMemoryBytes(POKE_DATA, [0xA1]); assert.equal(program.endPoke(), true)
+    program.beginPoke(); program.setMemoryBytes(POKE_DATA, [0xA2]); assert.equal(program.endPoke(), true)
+
+    const groups = Array.from(program.getUndoGroups())
+    assert.equal(groups.length, 2, 'the history holds two entries, so the oldest poke is gone')
+    assert.deepEqual(groups.map(group => group.kind), ['poke', 'poke'])
+    assert.deepEqual(groups[0].writes, [{ type: 'memory', address: POKE_DATA, old: [0xA1], new: [0xA2] }])
+    assert.deepEqual(groups[1].writes, [{ type: 'memory', address: POKE_DATA, old: [0xA0], new: [0xA1] }])
+
+    program.undo()
+    assert.deepEqual(firstBytes(), [0xA1], 'the newest poke went back whole')
+    program.undo()
+    assert.deepEqual(firstBytes(), [0xA0])
+    assert.equal(program.canUndo, false, 'the evicted poke cannot be undone')
+    assert.equal(Array.from(program.getUndoGroups()).length, 0)
+}
+
+// 6. canUndo and undo treat a poke like an instruction, and undoing one touches nothing else.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+
+    const before = {
+        pc: program.programCounter,
+        registers: Array.from(program.getRegistersValuesLong()),
+        fp: readRegisterFile(program.getFloatingPointRegistersValues()).map(String),
+        csr: readRegisterFile(program.getControlAndStatusRegistersValues()).map(String),
+        memory: Array.from(program.readMemoryBytes(POKE_DATA, 8)),
+        callStack: JSON.stringify(Array.from(program.getCallStack())),
+        stopReason: program.getStopReason(),
+    }
+    const instretBefore = csrOf(program)('instret')
+    assert.ok(instretBefore > 0n, 'the counters should have counted the instructions')
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    program.setFloatingPointRegisterValue(3, 0, 0x11)
+    program.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('uscratch'), 0, 0x99)
+    program.setMemoryBytes(POKE_DATA, [1, 2, 3, 4])
+    assert.equal(program.endPoke(), true)
+    assert.equal(program.canUndo, true, 'canUndo is true with a poke on top')
+    assert.equal(program.programCounter, before.pc, 'making a poke does not move the program counter')
+
+    program.undo()
+
+    assert.equal(program.programCounter, before.pc, 'undoing a poke leaves the program counter alone')
+    assert.deepEqual(Array.from(program.getRegistersValuesLong()), before.registers)
+    assert.deepEqual(readRegisterFile(program.getFloatingPointRegistersValues()).map(String), before.fp)
+    assert.deepEqual(readRegisterFile(program.getControlAndStatusRegistersValues()).map(String), before.csr)
+    assert.deepEqual(Array.from(program.readMemoryBytes(POKE_DATA, 8)), before.memory)
+    assert.equal(JSON.stringify(Array.from(program.getCallStack())), before.callStack,
+        'undoing a poke leaves the call stack alone')
+    assert.equal(program.getStopReason(), before.stopReason)
+    assert.equal(csrOf(program)('instret'), instretBefore,
+        'undoing a poke must not decrement the instruction counters')
+
+    // A poke of a read only counter is allowed, and undoing it puts the counter back.
+    const cycleBefore = csrOf(program)('cycle')
+    program.beginPoke()
+    program.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('cycle'), 0x2A, 7)
+    assert.equal(program.endPoke(), true)
+    assert.equal(csrOf(program)('cycle'), 0x2A00000007n)
+    assert.equal(csrOf(program)('cycleh'), 0x2An, 'the linked high half follows its base')
+    program.undo()
+    assert.equal(csrOf(program)('cycle'), cycleBefore, 'undo puts a poked counter back')
+
+    // And a poke of a linked register writes, and restores, the register it aliases.
+    const fcsrBefore = csrOf(program)('fcsr')
+    program.beginPoke()
+    program.setControlAndStatusRegisterValue(RISCV_CSR_REGISTERS.indexOf('frm'), 0, 3)
+    assert.equal(program.endPoke(), true)
+    assert.equal(csrOf(program)('fcsr'), fcsrBefore | 0x60n, 'writing frm updates fcsr')
+    program.undo()
+    assert.equal(csrOf(program)('fcsr'), fcsrBefore, 'and undoing it restores fcsr')
+    assert.equal(csrOf(program)('frm'), 0n)
+}
+
+// 7. A poke's identity is its own: never an instruction's address.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    const addresses = Array.from(program.getCompiledStatements()).map(statement => statement.address)
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    assert.equal(program.endPoke(), true)
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x56)
+    assert.equal(program.endPoke(), true)
+
+    const pokes = Array.from(program.getUndoGroups()).filter(group => group.kind === 'poke')
+    assert.equal(pokes.length, 2, '8. two consecutive pokes are two entries')
+    for (const poke of pokes) {
+        assert.equal(poke.pc, -1)
+        assert.equal(addresses.includes(poke.pc), false, 'a poke never carries an instruction address')
+    }
+    assert.equal(program.programCounter, addresses[3],
+        'and no poke key is ever written into the program counter')
+}
+
+// 8. Poke, then an instruction, then undo, undo: the instruction first, then the poke.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+
+    const registersBefore = Array.from(program.getRegistersValuesLong())
+    const memoryBefore = Array.from(program.readMemoryBytes(POKE_DATA, 8))
+    const pcBefore = program.programCounter
+    const csrBefore = readRegisterFile(program.getControlAndStatusRegistersValues()).map(String)
+
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    program.setMemoryBytes(POKE_DATA, [1, 2, 3, 4])
+    assert.equal(program.endPoke(), true)
+
+    await program.step() // li t3, 4
+    assert.equal(program.getRegisterValue('t3'), 4)
+
+    program.undo()
+    assert.equal(program.getRegisterValue('t3'), 0, 'the instruction is reverted first')
+    assert.equal(program.getRegisterValue('t2'), 0x55, 'and the poke is still in place')
+    assert.equal(program.programCounter, pcBefore)
+
+    program.undo()
+    assert.deepEqual(Array.from(program.getRegistersValuesLong()), registersBefore,
+        'undoing the poke leaves exactly the state from before it')
+    assert.deepEqual(Array.from(program.readMemoryBytes(POKE_DATA, 8)), memoryBefore)
+    assert.deepEqual(readRegisterFile(program.getControlAndStatusRegistersValues()).map(String), csrBefore)
+    assert.equal(program.programCounter, pcBefore)
+}
+
+// A poke into a memory mapped display repaints it, at once and again when undone, through the
+// observer the display already registers.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    const painted = []
+    const handle = program.addMemoryWriteObserver(POKE_DATA, POKE_DATA + 4,
+        (address, length, value) => painted.push([address, length, value]))
+
+    program.beginPoke()
+    program.setMemoryBytes(POKE_DATA, [0x44, 0xEE]) // the first byte already holds 0x44
+    assert.equal(program.endPoke(), true)
+    assert.deepEqual(painted, [[POKE_DATA + 1, 1, 0xEE]],
+        'a byte already holding the value written is skipped, so the display is not repainted for it')
+
+    program.undo()
+    assert.deepEqual(painted.slice(1), [[POKE_DATA + 1, 1, 0x33]],
+        'undoing a poke restores through the same store, so the display repaints back')
+    assert.deepEqual(Array.from(program.readMemoryBytes(POKE_DATA, 2)), [0x44, 0x33])
+
+    program.removeMemoryObserver(handle)
+}
+
+// With undo switched off the writes stand, but there is no entry to report or revert.
+{
+    const program = makePokeProgram()
+    await stepTimes(program, 3)
+    program.setUndoEnabled(false)
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    assert.equal(program.endPoke(), false, 'nothing is recorded while undo is disabled')
+    assert.equal(program.getRegisterValue('t2'), 0x55, 'but the write stands')
+    program.setUndoEnabled(true)
+}
+
+console.log('ok - pokes: transaction, one entry per poke, grouped history, undo')

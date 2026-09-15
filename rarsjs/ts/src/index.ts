@@ -306,7 +306,18 @@ export enum BackStepAction {
      * Members mirror the core's `BackStepper.Action` by position, because the core reports an
      * action as that enum's ordinal. Append here; never insert.
      */
-    CONTROL_AND_STATUS_COUNTERS_DECREMENT
+    CONTROL_AND_STATUS_COUNTERS_DECREMENT,
+    /**
+     * Restores one control and status register the way the host's setter wrote it, through the
+     * register's own value: a linked register writes the register it aliases, a read only counter
+     * is written anyway. Only a Poke records this, and only inside its own entry.
+     */
+    CONTROL_AND_STATUS_REGISTER_POKE_RESTORE,
+    /**
+     * A whole Poke: every value one `beginPoke`/`endPoke` transaction wrote, restored together.
+     * A Poke is a single back step, so it takes one slot of the undo size whatever it wrote.
+     */
+    POKE
 }
 
 /**
@@ -328,9 +339,88 @@ export interface JsBackStep {
      */
     readonly param2: number;
     /**
-     * The program counter value before the action.
+     * The program counter value before the action, or -1 for an action that belongs to no
+     * instruction: a Poke, or a host write made before anything ran.
      */
     readonly pc: number;
+
+    /**
+     * Whether this step is a whole Poke rather than one effect of an instruction. It is the
+     * discriminator this list needs, since a Poke and a pre-run host write both carry `pc` -1.
+     */
+    readonly isPoke: boolean;
+}
+
+/**
+ * One value a Poke changed: a register, named the way this package's getters spell it, or a run of
+ * consecutive memory bytes. `old` is what the simulator held when the write happened and `new` what
+ * it held when the Poke was closed, so a value written twice inside one Poke reports its final
+ * state.
+ */
+export type JsPokeWrite = JsPokeRegisterWrite | JsPokeMemoryWrite
+
+/**
+ * A register a Poke wrote. `name` is the register's own name, as this package spells it: a key of
+ * `RISCVRegisters` (`t0`), an entry of `RISCV_FLOATING_POINT_REGISTERS` (`ft0`) or one of
+ * `RISCV_CSR_REGISTERS` (`fcsr`) - the file it belongs to is the file that name is in.
+ *
+ * Every register here is 64 bits wide, which no JS number holds, so both values are **signed
+ * decimal strings**, the shape `getRegisterValueLong` and `getRegistersValuesLong` already use:
+ * read them with `BigInt(write.old)`, and with `BigInt.asUintN(64, BigInt(write.old))` for the
+ * unsigned form that `highLowToBigint` returns for the same register.
+ */
+export type JsPokeRegisterWrite = {
+    readonly type: 'register'
+    readonly name: string
+    readonly old: string
+    readonly new: string
+}
+
+/**
+ * A run of consecutive memory bytes a Poke wrote, `address` being the first one, unsigned, and the
+ * two arrays holding one byte (0 to 255) per address. A Poke that writes addresses that are not
+ * adjacent reports one of these per run, by ascending address. Unlike `readMemoryBytes`, these are
+ * ordinary JS arrays.
+ */
+export type JsPokeMemoryWrite = {
+    readonly type: 'memory'
+    readonly address: number
+    readonly old: number[]
+    readonly new: number[]
+}
+
+/**
+ * One entry of the undo history: everything a single `undo()` reverts, which is either one executed
+ * instruction or one Poke. Entries, their back steps and their writes are ordinary objects with own
+ * properties, so a whole history can be cloned, serialized or deep-compared as it comes.
+ */
+export type JsUndoGroup = JsInstructionUndoGroup | JsPokeUndoGroup
+
+/**
+ * One executed instruction, at the address `pc`, with every back step it recorded: the values it
+ * overwrote, and the `cycle`/`instret` decrement every instruction pushes on top of them.
+ */
+export type JsInstructionUndoGroup = {
+    readonly kind: 'instruction'
+    readonly pc: number
+    /** The instruction's back steps, newest first. */
+    readonly steps: JsBackStep[]
+    /** Always empty: only a Poke reports writes. */
+    readonly writes: readonly []
+}
+
+/**
+ * One Poke: register or memory values written by the host between two instructions, recorded as a
+ * step of its own. It belongs to no instruction, so `pc` is -1 and undoing it restores exactly what
+ * `writes` lists, leaving the program counter, the counters, the call stack and everything else
+ * alone.
+ */
+export type JsPokeUndoGroup = {
+    readonly kind: 'poke'
+    readonly pc: -1
+    /** The single back step the Poke is: one slot of the history, whatever the Poke wrote. */
+    readonly steps: [JsBackStep]
+    readonly writes: JsPokeWrite[]
 }
 
 
@@ -471,7 +561,8 @@ export interface JsRiscV {
     setUndoSize(size: number): void;
 
     /**
-     * Undoes the last instruction executed.
+     * Undoes the newest entry of the history: the last instruction executed, or the last Poke made,
+     * whichever is on top. Undoing a Poke restores every value it wrote and touches nothing else.
      */
     undo(): void;
 
@@ -629,10 +720,10 @@ export interface JsRiscV {
     getFloatingPointRegistersValues(): Int32Array;
 
     /**
-     * Sets one floating point register, writing it directly: no undo entry is recorded, because
-     * presetting a register from the host is not something the program did. Split the value with
-     * `bigintToHighLow`, and NaN-box a single yourself (`0xFFFFFFFFn << 32n | bits`) if that is
-     * what you mean.
+     * Sets one floating point register. Outside a Poke the write is direct: no undo entry is
+     * recorded, because presetting a register from the host is not something the program did.
+     * Inside a Poke it joins the open transaction. Split the value with `bigintToHighLow`, and
+     * NaN-box a single yourself (`0xFFFFFFFFn << 32n | bits`) if that is what you mean.
      * @param index Position in `RISCV_FLOATING_POINT_REGISTERS`. Must be a whole number from 0 to
      * 31; anything else throws.
      */
@@ -648,19 +739,56 @@ export interface JsRiscV {
     getControlAndStatusRegistersValues(): Int32Array;
 
     /**
-     * Sets one control and status register, writing it directly and recording no undo entry.
-     * Writing `fflags` or `frm` updates `fcsr`, and writing a counter such as `cycle` is allowed
-     * here even though the program cannot write it.
+     * Sets one control and status register. Outside a Poke the write is direct and records no undo
+     * entry; inside a Poke it joins the open transaction. Writing `fflags` or `frm` updates `fcsr`,
+     * and writing a counter such as `cycle` is allowed here even though the program cannot write
+     * it - so a counter is pokeable, and undoing that Poke puts the counter back.
      * @param index Position in `RISCV_CSR_REGISTERS`. Must be a whole number from 0 to 16;
      * anything else throws.
      */
     setControlAndStatusRegisterValue(index: number, high: number, low: number): void;
 
     /**
-     * Gets the undo stack.
+     * Gets the undo stack, one element per back step, newest first. An instruction usually occupies
+     * several of them - it records the values it overwrote and the counter decrement - while a Poke
+     * is exactly one, the element with `isPoke` set, whatever it wrote. Use `getUndoGroups` to read
+     * the history the way `undo()` pops it, one entry per instruction or Poke.
      * @returns An array of `JsBackStep` objects representing the history of the simulation.
      */
     getUndoStack(): JsBackStep[];
+
+    /**
+     * Gets the undo history grouped the way `undo()` pops it: one entry per executed instruction or
+     * per Poke, newest first, each carrying the back steps it is made of. A Poke entry also carries
+     * what it changed, with the old and the new value of each write.
+     */
+    getUndoGroups(): JsUndoGroup[];
+
+    /**
+     * Opens a Poke: a register or memory value changed by the host between two instructions,
+     * recorded in this history as a step of its own.
+     *
+     * Until `endPoke` the setters - `setRegisterValue`, `setFloatingPointRegisterValue`,
+     * `setControlAndStatusRegisterValue` and `setMemoryBytes` - journal what they write into the
+     * open transaction, however many of them are called, and `endPoke` records the lot as one
+     * history entry that one `undo()` reverts and that takes one slot of the undo size, whether it
+     * wrote one byte or a hundred. Outside a transaction the same setters stay direct and record
+     * nothing, which is what presetting state needs.
+     *
+     * Throws if a Poke is already open, or if a `step`/`simulate*` call is still in flight.
+     */
+    beginPoke(): void;
+
+    /**
+     * Closes the open Poke.
+     * @returns True if it recorded one history entry, false if nothing changed - or if undo is
+     * disabled or its size is 0, in which case the writes stand but cannot be undone.
+     * Throws if no Poke is open.
+     */
+    endPoke(): boolean;
+
+    /** Whether a Poke is open, so that the setters journal rather than writing straight through. */
+    pokeOpen(): boolean;
 
     /**
      * Reads a sequence of bytes from memory.
@@ -676,9 +804,13 @@ export interface JsRiscV {
     /**
      * Writes a sequence of bytes to memory.
      *
-     * Unlike `readMemoryBytes`, this writes the way the program does: it notifies write observers
-     * and, while undo is enabled, records an undo step per byte. Use `setPeripheralWord` for a
-     * device keeping its own register up to date.
+     * Unlike `readMemoryBytes`, this writes the way the program does, so write observers are
+     * notified and a memory mapped display repaints. It records no undo step of its own: a host
+     * write is not an instruction, and recording it would make the next `undo()` revert it together
+     * with the instruction that ran before it. Inside a Poke the same write joins the open
+     * transaction instead, and a byte already holding the value written is skipped entirely.
+     *
+     * Use `setPeripheralWord` for a device keeping its own register up to date.
      * @param address The starting memory address.
      * @param bytes An array of bytes to write to memory.
      */
@@ -746,7 +878,9 @@ export interface JsRiscV {
     getNextStatement(): JsProgramStatement;
 
     /**
-     * Sets the value of a register.
+     * Sets the value of a register. Outside a Poke the write is direct: it records no undo step.
+     * Inside a Poke it joins the open transaction, except for `zero`, which holds no value and so
+     * is left alone.
      * @param register The name of the register.
      * @param value The value to set the register to.
      */
