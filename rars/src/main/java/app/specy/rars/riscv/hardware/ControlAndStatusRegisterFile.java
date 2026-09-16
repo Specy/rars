@@ -89,17 +89,24 @@ public class ControlAndStatusRegisterFile {
      **/
     public static boolean updateRegister(int num, long val) {
         settleCounters();
-        if (instance.getRegister(num) instanceof ReadOnlyRegister) {
+        // Resolved once: the undo entry reports what the write left, and only the register itself
+        // knows that, so it is read from the register rather than from `val`.
+        Register target = instance.getRegister(num);
+        if (target instanceof ReadOnlyRegister) {
             return true;
         }
         // TODO: do something to better handle the h csrs
         if (num >= 0xC80 && num <= 0xC82) {
             return true;
         }
-        if ((Globals.getSettings().getBackSteppingEnabled())) {
-            Globals.program.getBackStepper().addControlAndStatusRestore(num, instance.updateRegister(num, val));
+        if ((Globals.getSettings().getBackSteppingEnabled()) && target != null) {
+            long old = instance.updateRegister(target, val);
+            // A masked register keeps the bits it does not own and a linked register writes the
+            // register it aliases, so the value stored is not always `val`; getValueNoNotify()
+            // reports the register's own value in the same reading as the old value just returned.
+            Globals.program.getBackStepper().addControlAndStatusRestore(num, old, target.getValueNoNotify());
         } else {
-            instance.updateRegister(num, val);
+            instance.updateRegister(target, val);
         }
         return false;
     }
@@ -148,7 +155,10 @@ public class ControlAndStatusRegisterFile {
         // spent the whole undo history on entries that undo nothing.
         if (old == val) return;
         if ((Globals.getSettings().getBackSteppingEnabled())) {
-            Globals.program.getBackStepper().addControlAndStatusBackdoor(register.getNumber(), old);
+            // `val` is what the register now holds: setValueBackdoor stores it verbatim, whatever
+            // kind of register this is, so the entry reports it as the value written without
+            // reading anything back.
+            Globals.program.getBackStepper().addControlAndStatusBackdoor(register.getNumber(), old, val);
         }
     }
 

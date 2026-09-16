@@ -1065,3 +1065,382 @@ RISCV.setIs64Bit(false)
 }
 
 console.log('ok - pokes: transaction, one entry per poke, grouped history, undo')
+
+// ---------------------------------------------------------------------------
+// Written values: every back step that restores a value reports what the write left behind beside
+// what it replaced, both as the simulator saw them at the store, and both whole - a 64 bit value
+// crosses as a signed decimal string, where `param2` truncates it to 32 bits.
+// ---------------------------------------------------------------------------
+
+const WRITTEN_SOURCE = `
+    .data
+buf:    .word 0x11223344
+        .word 0x55667788
+        .word 0x99AABBCC
+
+    .text
+    .globl main
+main:
+    li   t0, 0x1234
+    la   t1, buf
+    sw   t0, 0(t1)
+    li   t2, 0x7FFF5678
+    sh   t2, 4(t1)
+    li   t3, -1
+    sb   t3, 8(t1)
+    fcvt.s.w ft0, t0
+    csrrwi t4, fcsr, 3
+    jal  ra, done
+    nop
+done:
+    li   a7, 10
+    ecall
+`
+
+const WRITTEN_DATA = 0x10010000
+
+const makeWrittenProgram = (source = WRITTEN_SOURCE) => {
+    const program = makeSingleFileRiscV(source)
+    registerHandlers(program, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    // The capacity is a global of the simulator, and the poke tests above leave it small enough to
+    // evict the entries these assertions look back at.
+    program.setUndoSize(2000)
+    const assembled = program.assemble()
+    assert.equal(assembled.hasErrors, false, `written-value assembly failed: ${assembled.report}`)
+    program.initialize(true)
+    return program
+}
+
+// The back steps one instruction recorded, newest first.
+const stepRecording = async program => {
+    const before = program.getUndoStack().length
+    await program.step()
+    const stack = Array.from(program.getUndoStack())
+    return stack.slice(0, stack.length - before)
+}
+
+const runToEnd = async (program, limit = 1000) => {
+    let steps = 0
+    while (!program.terminated && steps < limit) {
+        await program.step()
+        steps++
+    }
+    assert.ok(program.terminated, 'program did not terminate')
+}
+
+const withAction = (steps, action) => steps.filter(step => step.action === action)
+
+const only = (steps, action) => {
+    const found = withAction(steps, action)
+    assert.equal(found.length, 1, `expected exactly one ${BackStepAction[action]} step, found ${found.length}`)
+    return found[0]
+}
+
+// 1. A register write reports the whole register, before and after, as the register file reads it.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram()
+    let registerWrites = 0
+    let fpWrites = 0
+    let csrWrites = 0
+    while (!program.terminated && registerWrites < 100) {
+        const before = Array.from(program.getRegistersValuesLong())
+        const fpBefore = readRegisterFile(program.getFloatingPointRegistersValues())
+        const csrBefore = csrOf(program)
+        const recorded = await stepRecording(program)
+        const after = Array.from(program.getRegistersValuesLong())
+        const fpAfter = readRegisterFile(program.getFloatingPointRegistersValues())
+        const csrAfter = csrOf(program)
+        for (const step of withAction(recorded, BackStepAction.REGISTER_RESTORE)) {
+            assert.equal(step.oldValue, before[step.param1],
+                'a register write reports the whole register as it was before the write')
+            assert.equal(step.newValue, after[step.param1],
+                'and the whole register as the write left it')
+            registerWrites++
+        }
+        for (const step of withAction(recorded, BackStepAction.FLOATING_POINT_REGISTER_RESTORE)) {
+            assert.equal(BigInt.asUintN(64, BigInt(step.oldValue)), fpBefore[step.param1],
+                'a floating point write reports the whole register before it')
+            assert.equal(BigInt.asUintN(64, BigInt(step.newValue)), fpAfter[step.param1],
+                'and after it, NaN boxing and all')
+            fpWrites++
+        }
+        for (const step of withAction(recorded, BackStepAction.CONTROL_AND_STATUS_REGISTER_RESTORE)) {
+            // `fcsr` is the only control and status register this program writes.
+            assert.equal(step.param1, 3, 'param1 is still the architectural CSR number')
+            assert.equal(BigInt.asUintN(64, BigInt(step.oldValue)), csrBefore('fcsr'))
+            assert.equal(BigInt.asUintN(64, BigInt(step.newValue)), csrAfter('fcsr'))
+            csrWrites++
+        }
+    }
+    assert.ok(registerWrites >= 8, `expected the program to write registers, saw ${registerWrites}`)
+    assert.equal(fpWrites, 1, 'fcvt.s.w records one floating point write')
+    assert.equal(csrWrites, 1, 'csrrwi records one control and status write')
+}
+
+// 1b. A memory write reports the bytes it replaced and the bytes it left, at the width it was made,
+// and the program counter restore the address it put back beside the address the instruction set.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram()
+    await runToEnd(program)
+    const stack = Array.from(program.getUndoStack())
+
+    const word = only(stack, BackStepAction.MEMORY_RESTORE_WORD)
+    assert.equal(word.param1, WRITTEN_DATA, 'param1 is still the address')
+    assert.equal(word.oldValue, String(0x11223344), 'the word the store replaced')
+    assert.equal(word.newValue, String(0x1234), 'and the word it left')
+
+    const half = only(stack, BackStepAction.MEMORY_RESTORE_HALF)
+    assert.equal(half.param1, WRITTEN_DATA + 4)
+    assert.equal(half.oldValue, String(0x7788), 'a half reports the half it replaced')
+    assert.equal(half.newValue, String(0x5678),
+        'and the half it left: the value is reported at the width of the write, not the whole register')
+
+    const byte = only(stack, BackStepAction.MEMORY_RESTORE_BYTE)
+    assert.equal(byte.param1, WRITTEN_DATA + 8)
+    assert.equal(byte.oldValue, String(0xCC), 'a byte reports the byte it replaced')
+    assert.equal(byte.newValue, String(0xFF), 'and the byte it left, so `sb` of -1 reads as 0xff')
+
+    assert.deepEqual(Array.from(program.readMemoryBytes(WRITTEN_DATA, 12)),
+        [0x34, 0x12, 0x00, 0x00, 0x78, 0x56, 0x66, 0x55, 0xFF, 0xBB, 0xAA, 0x99],
+        'and what the three stores left is what memory holds')
+
+    const pc = only(stack, BackStepAction.PC_RESTORE)
+    const statements = Array.from(program.getCompiledStatements())
+    const jal = statements.find(statement => statement.assemblyStatement.startsWith('jal'))
+    const target = statements.find(statement => statement.address === jal.address + 8)
+    assert.equal(pc.param1, jal.address, 'param1 is still the address the restore puts back')
+    assert.equal(pc.oldValue, String(jal.address), 'which is what the restore reports as the old value')
+    assert.equal(pc.newValue, String(target.address),
+        'beside the address the instruction set: the jump target, two instructions on')
+}
+
+// 2. The values cross without loss: a 64 bit register or an `sd` truncates in `param2` and does not
+// in `oldValue`/`newValue`.
+{
+    RISCV.setIs64Bit(true)
+    const program = makeWrittenProgram(`
+    .data
+dbuf:   .dword 0x1122334455667788
+
+    .text
+    .globl main
+main:
+    li   t0, 0xFEDCBA9876543210
+    la   t1, dbuf
+    sd   t0, 0(t1)
+    li   a7, 10
+    ecall
+`)
+    await runToEnd(program)
+    const stack = Array.from(program.getUndoStack())
+
+    const registers = Array.from(program.getRegistersValuesLong())
+    const t0 = RISCV_REGISTERS.indexOf('t0')
+    const written = withAction(stack, BackStepAction.REGISTER_RESTORE)
+        .find(step => step.param1 === t0 && step.newValue === registers[t0])
+    assert.ok(written, 'the last write to t0 reports the whole 64 bit value it left')
+    assert.equal(BigInt.asUintN(64, BigInt(written.newValue)), 0xFEDCBA9876543210n,
+        'read back with BigInt, exactly')
+    assert.equal(written.param2 | 0, written.param2,
+        'param2 is still the 32 bit int it always was')
+
+    const dword = only(stack, BackStepAction.MEMORY_RESTORE_DOUBLE_WORD)
+    assert.equal(dword.oldValue, String(0x1122334455667788n),
+        'an `sd` reports all 64 bits of what it replaced')
+    assert.equal(BigInt.asUintN(64, BigInt(dword.newValue)), 0xFEDCBA9876543210n,
+        'and all 64 bits of what it wrote')
+    assert.equal(dword.param2, 0x55667788 | 0,
+        'where param2 still hands over the low half alone, as it always has')
+    assert.notEqual(dword.param2, Number(dword.oldValue),
+        'which is exactly the truncation oldValue exists to undo')
+
+    // The clock sample the simulator takes is the other 64 bit value on this stack, and it is a
+    // write that lands in an instruction's entry like any other, so it reports both sides: the
+    // millisecond reading it left beside the one it replaced.
+    for (const step of withAction(stack, BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)) {
+        assert.equal(BigInt.asIntN(32, BigInt(step.oldValue)), BigInt(step.param2),
+            'param2 is the low half of the value oldValue reports whole')
+        assert.ok(BigInt(step.newValue) > BigInt(step.oldValue),
+            'the clock backdoor reports the reading it wrote, which is later than the one it replaced')
+    }
+    RISCV.setIs64Bit(false)
+}
+
+// 2b. The clock backdoor, forced: a sample is recorded only when the millisecond turned over, so
+// this runs long enough for that to be certain, with a history big enough to still hold the
+// samples, and checks the written value against the clock and against the next write's old value.
+{
+    RISCV.setIs64Bit(false)
+    const ticking = makeSingleFileRiscV(`
+    .text
+    .globl main
+main:
+    li   t0, 0
+loop:
+    addi t0, t0, 1
+    j    loop
+`)
+    registerHandlers(ticking, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    // The loop pushes about three entries per instruction, and the simulator samples the clock
+    // every sixty fourth instruction: the history has to span more than a millisecond of simulation
+    // for a recorded sample to still be on it at the end.
+    ticking.setUndoSize(200_000)
+    const assembled = ticking.assemble()
+    assert.equal(assembled.hasErrors, false, `clock-sample assembly failed: ${assembled.report}`)
+    ticking.initialize(true)
+    const before = BigInt(Date.now())
+    await ticking.simulateWithLimit(500_000)
+    const after = BigInt(Date.now())
+    const samples = withAction(Array.from(ticking.getUndoStack()),
+        BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)
+    assert.ok(samples.length >= 2, `expected the run to sample the clock, saw ${samples.length}`)
+    for (const step of samples) {
+        const wrote = BigInt(step.newValue)
+        assert.ok(wrote >= before && wrote <= after,
+            `the written value is the wall clock reading the simulator stored, got ${step.newValue}`)
+    }
+    // getUndoStack is newest first, so this walks the samples forwards in time: what one write left
+    // is what the next one replaced, which no reader could reconstruct from oldValue alone.
+    const ordered = samples.slice().reverse()
+    for (let i = 1; i < ordered.length; i++) {
+        assert.equal(ordered[i].oldValue, ordered[i - 1].newValue,
+            'the reading one clock write left is the reading the next one replaced')
+    }
+}
+
+// 3. The shape is additive: both fields are on every step of both read APIs, the existing fields are
+// untouched, and a Poke's own writes are unchanged.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram()
+    await runToEnd(program)
+
+    const isValue = value => typeof value === 'string' && /^-?\d+$/.test(value)
+    const stack = Array.from(program.getUndoStack())
+    assert.ok(stack.length > 0)
+    for (const step of stack) {
+        assert.ok(isValue(step.oldValue), `oldValue must be a signed decimal string, got ${step.oldValue}`)
+        assert.ok(isValue(step.newValue), `newValue must be a signed decimal string, got ${step.newValue}`)
+        assert.equal(typeof step.param1, 'number')
+        assert.equal(typeof step.param2, 'number')
+        assert.equal(typeof step.pc, 'number')
+        assert.equal(typeof step.isPoke, 'boolean')
+    }
+    for (const group of Array.from(program.getUndoGroups())) {
+        for (const step of group.steps) {
+            assert.ok(isValue(step.oldValue) && isValue(step.newValue),
+                'every step of a group carries both values too')
+        }
+    }
+    // Own enumerable properties, so a whole history still serializes as it comes.
+    assert.ok(JSON.stringify(program.getUndoStack()).includes('"newValue"'))
+
+    // An entry that restores no single value carries neither.
+    for (const step of withAction(stack, BackStepAction.CONTROL_AND_STATUS_COUNTERS_DECREMENT)) {
+        assert.equal(step.oldValue, '0')
+        assert.equal(step.newValue, '0')
+    }
+}
+
+// 3b. A Poke reports both sides through its own writes, as it already did, and the one back step it
+// is carries neither.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram()
+    await program.step()
+    program.beginPoke()
+    program.setRegisterValue('t2', 0, 0x55)
+    program.setMemoryBytes(WRITTEN_DATA, [0xDE, 0xAD])
+    assert.equal(program.endPoke(), true)
+
+    const poke = Array.from(program.getUndoGroups())[0]
+    assert.equal(poke.kind, 'poke')
+    assert.deepEqual(poke.writes, [
+        { type: 'register', name: 't2', old: '0', new: '85' },
+        { type: 'memory', address: WRITTEN_DATA, old: [0x44, 0x33], new: [0xDE, 0xAD] },
+    ], 'a poke reports its writes exactly as before')
+    assert.equal(poke.steps.length, 1)
+    assert.equal(poke.steps[0].action, BackStepAction.POKE)
+    assert.equal(poke.steps[0].oldValue, '0', 'the poke entry itself carries no single value')
+    assert.equal(poke.steps[0].newValue, '0')
+
+    program.undo()
+    assert.equal(program.getRegisterValue('t2'), 0)
+    assert.deepEqual(Array.from(program.readMemoryBytes(WRITTEN_DATA, 2)), [0x44, 0x33])
+}
+
+// 4. The value is captured at the store: a write records the one entry it always did, with no
+// second entry and no read back of what it wrote.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram()
+    // Step until the `sw`, whose expansion `li t0, 0x1234` and `la t1, buf` precede.
+    let recorded = []
+    for (let i = 0; i < 10 && withAction(recorded, BackStepAction.MEMORY_RESTORE_WORD).length === 0; i++) {
+        recorded = await stepRecording(program)
+    }
+    assert.equal(
+        withAction(recorded, BackStepAction.MEMORY_RESTORE_WORD).length, 1,
+        'the store records exactly one memory entry, as it did before it reported what it wrote')
+    assert.equal(recorded.filter(step =>
+        step.action !== BackStepAction.MEMORY_RESTORE_WORD
+        && step.action !== BackStepAction.CONTROL_AND_STATUS_COUNTERS_DECREMENT
+        && step.action !== BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR).length, 0,
+        'and nothing else: no entry exists to carry the written value')
+}
+
+// 4b. The written value survives the history wrapping around: the stack is a ring of recycled
+// entries, so this fills it many times over and checks that what is left reads as one unbroken
+// chain - each write of `t0` left what the next one replaced - and that undo walks back down it.
+{
+    RISCV.setIs64Bit(false)
+    const looping = makeSingleFileRiscV(`
+    .text
+    .globl main
+main:
+    li   t0, 0
+loop:
+    addi t0, t0, 1
+    j    loop
+`)
+    registerHandlers(looping, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    const capacity = 64
+    looping.setUndoSize(capacity)
+    const assembled = looping.assemble()
+    assert.equal(assembled.hasErrors, false, `looping assembly failed: ${assembled.report}`)
+    looping.initialize(true)
+    await looping.simulateWithLimit(5_000)
+
+    const stack = Array.from(looping.getUndoStack())
+    assert.equal(stack.length, capacity, 'the ring holds exactly its capacity once it has wrapped')
+    const t0 = RISCV_REGISTERS.indexOf('t0')
+    const writes = withAction(stack, BackStepAction.REGISTER_RESTORE).filter(step => step.param1 === t0)
+    assert.ok(writes.length >= 8, `expected the loop's register writes to survive, saw ${writes.length}`)
+    const ordered = writes.slice().reverse() // oldest first
+    for (let i = 0; i < ordered.length; i++) {
+        assert.equal(BigInt(ordered[i].newValue), BigInt(ordered[i].oldValue) + 1n,
+            'each `addi t0, t0, 1` reports the value it left, one above the one it replaced')
+        if (i > 0) {
+            assert.equal(ordered[i].oldValue, ordered[i - 1].newValue,
+                'and the value one iteration left is the value the next one replaced')
+        }
+    }
+    // Undoing walks back down that chain: one undo reverts one instruction, and the register comes
+    // back to exactly the value that instruction's entry reported having replaced.
+    let checked = 0
+    while (looping.canUndo && checked < 8) {
+        const group = Array.from(looping.getUndoGroups())[0]
+        const write = group.steps.find(step =>
+            step.action === BackStepAction.REGISTER_RESTORE && step.param1 === t0)
+        looping.undo()
+        if (!write) continue
+        assert.equal(Array.from(looping.getRegistersValuesLong())[t0], write.oldValue,
+            'undoing a register write puts back exactly the value the entry reported')
+        checked++
+    }
+    assert.equal(checked, 8, 'the wrapped history undid its register writes')
+}
+
+console.log('ok - written values: registers, memory at its width, the pc, lossless across 64 bits')

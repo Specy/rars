@@ -425,6 +425,9 @@ public class JsRiscV {
      * one to three of them, a poke exactly one, whatever it wrote - the element with `isPoke` set,
      * which is what tells a poke apart from a host write made before anything ran, since both carry
      * pc -1. Use getUndoGroups() to read the history the way undo() pops it.
+     *
+     * Every step that restores a value reports both sides of the write it undoes, whole, as the
+     * signed decimal strings oldValue and newValue; param1 and param2 are unchanged.
      */
     @JSExport
     public JSArray<JSObject> getUndoStack() {

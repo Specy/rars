@@ -88,7 +88,10 @@ public class RegisterFile {
             ;
         } else {
             if ((Globals.getSettings().getBackSteppingEnabled())) {
-                Globals.program.getBackStepper().addRegisterFileRestore(num, instance.updateRegister(num, val));
+                // The value written is `val` itself: these are plain Registers, so the whole
+                // register holds exactly what was stored, and the entry reports the whole register
+                // on both sides. Taken from the argument in hand, not read back.
+                Globals.program.getBackStepper().addRegisterFileRestore(num, instance.updateRegister(num, val), val);
             } else {
                 instance.updateRegister(num, val);
             }
@@ -240,7 +243,9 @@ public class RegisterFile {
         int old = programCounterValue;
         programCounterValue = value;
         if (Globals.getSettings().getBackSteppingEnabled()) {
-            Globals.program.getBackStepper().addPCRestore(old);
+            // `value` is the address the instruction set; the entry reports it beside the address
+            // the restore would put back.
+            Globals.program.getBackStepper().addPCRestore(old, value);
         }
         return old;
     }

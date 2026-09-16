@@ -450,7 +450,7 @@ public class Memory extends Observable {
         int oldValue = storeRawWord(address, value);
         notifyAnyObservers(AccessNotice.WRITE, address, WORD_LENGTH_BYTES, value);
         if (Globals.getSettings().getBackSteppingEnabled()) {
-            Globals.program.getBackStepper().addMemoryRestoreRawWord(address, oldValue);
+            Globals.program.getBackStepper().addMemoryRestoreRawWord(address, oldValue, value);
         }
         return oldValue;
     }
@@ -522,8 +522,10 @@ public class Memory extends Observable {
      **/
     public int setWord(int address, int value) throws AddressErrorException {
         checkStoreWordAligned(address);
+        // The written value is reported at the width of the write, as the old value `set` returns
+        // already is: a whole word here, the low half or the low byte below.
         return (Globals.getSettings().getBackSteppingEnabled())
-                ? Globals.program.getBackStepper().addMemoryRestoreWord(address, set(address, value, WORD_LENGTH_BYTES))
+                ? Globals.program.getBackStepper().addMemoryRestoreWord(address, set(address, value, WORD_LENGTH_BYTES), value)
                 : set(address, value, WORD_LENGTH_BYTES);
     }
 
@@ -545,7 +547,7 @@ public class Memory extends Observable {
                     SimulationException.STORE_ADDRESS_MISALIGNED, address);
         }
         return (Globals.getSettings().getBackSteppingEnabled())
-                ? Globals.program.getBackStepper().addMemoryRestoreHalf(address, set(address, value, 2))
+                ? Globals.program.getBackStepper().addMemoryRestoreHalf(address, set(address, value, 2), value & 0xFFFF)
                 : set(address, value, 2);
     }
 
@@ -561,7 +563,7 @@ public class Memory extends Observable {
 
     public int setByte(int address, int value) throws AddressErrorException {
         return (Globals.getSettings().getBackSteppingEnabled())
-                ? Globals.program.getBackStepper().addMemoryRestoreByte(address, set(address, value, 1))
+                ? Globals.program.getBackStepper().addMemoryRestoreByte(address, set(address, value, 1), value & 0xFF)
                 : set(address, value, 1);
     }
 
@@ -581,7 +583,7 @@ public class Memory extends Observable {
         oldLowOrder = set(address, (int) value, 4);
         long old = ((long)oldHighOrder << 32) | (oldLowOrder & 0xFFFFFFFFL);
         return (Globals.getSettings().getBackSteppingEnabled())
-                ? Globals.program.getBackStepper().addMemoryRestoreDoubleWord(address, old)
+                ? Globals.program.getBackStepper().addMemoryRestoreDoubleWord(address, old, value)
                 : old;
     }
 

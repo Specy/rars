@@ -377,12 +377,13 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack. The action here
      * is to restore a raw memory word value (setRawWord).
      *
-     * @param address The affected memory address.
-     * @param value   The "restore" value to be stored there.
+     * @param address  The affected memory address.
+     * @param value    The "restore" value to be stored there.
+     * @param newValue The word the write left at that address.
      * @return the argument value
      */
-    public int addMemoryRestoreRawWord(int address, int value) {
-        backSteps.push(Action.MEMORY_RESTORE_RAW_WORD, pc(), address, value);
+    public int addMemoryRestoreRawWord(int address, int value, int newValue) {
+        backSteps.push(Action.MEMORY_RESTORE_RAW_WORD, pc(), address, value, newValue, 0);
         return value;
     }
 
@@ -390,17 +391,24 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack. The action here
      * is to restore a memory word value.
      *
-     * @param address The affected memory address.
-     * @param value   The "restore" value to be stored there.
+     * @param address  The affected memory address.
+     * @param value    The "restore" value to be stored there.
+     * @param newValue The word the write left at that address.
      * @return the argument value
      */
-    public int addMemoryRestoreWord(int address, int value) {
-        backSteps.push(Action.MEMORY_RESTORE_WORD, pc(), address, value);
+    public int addMemoryRestoreWord(int address, int value, int newValue) {
+        backSteps.push(Action.MEMORY_RESTORE_WORD, pc(), address, value, newValue, 0);
         return value;
     }
 
-    public long addMemoryRestoreDoubleWord(int address, long value) {
-        backSteps.push(Action.MEMORY_RESTORE_DOUBLE_WORD, pc(), address, value);
+    /**
+     * @param address  The affected memory address.
+     * @param value    The "restore" value to be stored there.
+     * @param newValue The double word the write left at that address.
+     * @return the argument value
+     */
+    public long addMemoryRestoreDoubleWord(int address, long value, long newValue) {
+        backSteps.push(Action.MEMORY_RESTORE_DOUBLE_WORD, pc(), address, value, 0, newValue);
         return value;
     }
 
@@ -408,12 +416,13 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack.  The action here
      * is to restore a memory half-word value.
      *
-     * @param address The affected memory address.
-     * @param value   The "restore" value to be stored there, in low order half.
+     * @param address  The affected memory address.
+     * @param value    The "restore" value to be stored there, in low order half.
+     * @param newValue The half the write left at that address, in low order half.
      * @return the argument value
      */
-    public int addMemoryRestoreHalf(int address, int value) {
-        backSteps.push(Action.MEMORY_RESTORE_HALF, pc(), address, value);
+    public int addMemoryRestoreHalf(int address, int value, int newValue) {
+        backSteps.push(Action.MEMORY_RESTORE_HALF, pc(), address, value, newValue, 0);
         return value;
     }
 
@@ -421,12 +430,13 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack.  The action here
      * is to restore a memory byte value.
      *
-     * @param address The affected memory address.
-     * @param value   The "restore" value to be stored there, in low order byte.
+     * @param address  The affected memory address.
+     * @param value    The "restore" value to be stored there, in low order byte.
+     * @param newValue The byte the write left at that address, in low order byte.
      * @return the argument value
      */
-    public int addMemoryRestoreByte(int address, int value) {
-        backSteps.push(Action.MEMORY_RESTORE_BYTE, pc(), address, value);
+    public int addMemoryRestoreByte(int address, int value, int newValue) {
+        backSteps.push(Action.MEMORY_RESTORE_BYTE, pc(), address, value, newValue, 0);
         return value;
     }
 
@@ -436,10 +446,11 @@ public class BackStepper {
      *
      * @param register The affected register number.
      * @param value    The "restore" value to be stored there.
+     * @param newValue The whole register's value after the write.
      * @return the argument value
      */
-    public long addRegisterFileRestore(int register, long value) {
-        backSteps.push(Action.REGISTER_RESTORE, pc(), register, value);
+    public long addRegisterFileRestore(int register, long value, long newValue) {
+        backSteps.push(Action.REGISTER_RESTORE, pc(), register, value, 0, newValue);
         return value;
     }
 
@@ -447,15 +458,19 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack.  The action here
      * is to restore the program counter.
      *
-     * @param value The "restore" value to be stored there.
+     * @param value    The "restore" value to be stored there.
+     * @param newValue The address the instruction set the program counter to, unadjusted: the
+     *                 branch or jump target it just took.
      * @return the argument value
      */
-    public int addPCRestore(int value) {
+    public int addPCRestore(int value, int newValue) {
         // adjust for value reflecting incremented PC.
         value -= Instruction.INSTRUCTION_LENGTH;
         // Use "value" insead of "pc()" for second arg because RegisterFile.getProgramCounter()
         // returns branch target address at this point.
-        backSteps.push(Action.PC_RESTORE, value, value);
+        // param2 is unused by this action and stays 0, as it always has been: the address put back
+        // is param1, and the written value is the address the instruction set.
+        backSteps.push(Action.PC_RESTORE, value, value, 0, newValue, 0);
         return value;
     }
 
@@ -465,10 +480,13 @@ public class BackStepper {
      *
      * @param register The affected register number.
      * @param value    The "restore" value to be stored there.
+     * @param newValue The whole register's value after the write, read as the old value is: a
+     *                 masked register keeps the bits it does not own and a linked register reports
+     *                 its own field rather than the register it aliases.
      * @return the argument value
      */
-    public long addControlAndStatusRestore(int register, long value) {
-        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_RESTORE, pc(), register, value);
+    public long addControlAndStatusRestore(int register, long value, long newValue) {
+        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_RESTORE, pc(), register, value, 0, newValue);
         return value;
     }
 
@@ -478,12 +496,18 @@ public class BackStepper {
      * is to restore a control and status register value. This does not obey
      * read only restrictions and does not notify observers.
      *
+     * Its only writer is the simulator sampling the wall clock into the `time` counter, rather
+     * than a program writing a register, but it is a write that lands in an instruction's entry all
+     * the same, so it reports both sides like any other: `setValueBackdoor` stores the value it is
+     * given verbatim, whatever kind of register it is, so the written value is the argument itself.
+     *
      * @param register The affected register number.
      * @param value    The "restore" value to be stored there.
+     * @param newValue The value the backdoor write left in the register.
      * @return the argument value
      */
-    public long addControlAndStatusBackdoor(int register, long value) {
-        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_BACKDOOR, pc(), register, value);
+    public long addControlAndStatusBackdoor(int register, long value, long newValue) {
+        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_BACKDOOR, pc(), register, value, 0, newValue);
         return value;
     }
 
@@ -519,10 +543,11 @@ public class BackStepper {
      *
      * @param register The affected register number.
      * @param value    The "restore" value to be stored there.
+     * @param newValue The whole register's value after the write, NaN boxing and all.
      * @return the argument value
      */
-    public long addFloatingPointRestore(int register, long value) {
-        backSteps.push(Action.FLOATING_POINT_REGISTER_RESTORE, pc(), register, value);
+    public long addFloatingPointRestore(int register, long value, long newValue) {
+        backSteps.push(Action.FLOATING_POINT_REGISTER_RESTORE, pc(), register, value, 0, newValue);
         return value;
     }
 
@@ -546,6 +571,34 @@ public class BackStepper {
         private ProgramStatement ps;   // statement whose action is being "undone" here
         private int param1;  // first parameter required by that action
         private long param2;  // optional second parameter required by that action
+        /*
+         * The value the write left behind, beside the one param2 puts back: the whole register
+         * after a register, floating point or CSR write, the bytes at the address after a memory
+         * write at the width it was made, and the address the instruction set after a PC restore.
+         * An action that restores no value of its own - the counters decrement, DO_NOTHING and a
+         * poke, whose own writes report both sides themselves - reports 0 and writes neither field.
+         *
+         * Recording it at all is the whole cost of this change, and the shape here is what makes
+         * that cost nothing. Measured on the `addi`/`j` compute loop the editor's harness uses,
+         * against both the published 3.5.0 build and a build of the release commit made here:
+         *
+         *  - Two fields rather than one, so that each write path stores the value in the width it
+         *    already holds. TeaVM compiles a Java long into an object of its own (the generated
+         *    code calls Long_fromInt to make one), so a single long field made every jump allocate
+         *    a Long for its target: about 2% of the loop.
+         *  - One push body. Giving the actions that carry a value a push of their own cost 6%, and
+         *    recording the value through a second little method called after each push cost 7%,
+         *    both without storing anything more than this does. push() is the bookkeeping every
+         *    simulated instruction pays, and it measures as the release build only while it stays
+         *    one body that the compiler keeps inlining into the write paths.
+         *  - `advance`, called from that body, wraps with a comparison rather than a remainder,
+         *    which pays for the two stores.
+         *
+         * Only the field belonging to the entry's action is read, so a recycled slot needs no
+         * clearing: getNewValue() picks the field by action, and returns 0 where there is no value.
+         */
+        private int param3Int;
+        private long param3Long;
         private int pokeGroup; // the poke transaction this step is, or 0 for an instruction's step
         // A poke's restores, oldest first. They live in the entry rather than in a slot each, so
         // that a poke of a hundred bytes is still one slot of the history and is never evicted in
@@ -633,6 +686,8 @@ public class BackStepper {
             ps = null;
             param1 = 0;
             param2 = 0;
+            param3Int = 0;
+            param3Long = 0;
             pokeGroup = group;
             pokeRestores = restores;
         }
@@ -652,6 +707,42 @@ public class BackStepper {
 
         public long getParam2() {
             return param2;
+        }
+
+        /**
+         * The value this step replaced, whole and untruncated: {@link #getParam2()} for every
+         * action that carries one, except PC_RESTORE, which has always kept the address it puts
+         * back in param1 and left param2 at 0.
+         */
+        public long getOldValue() {
+            return action == Action.PC_RESTORE ? param1 : param2;
+        }
+
+        /**
+         * The value the write left, beside {@link #getOldValue()}, as the simulator saw it at the
+         * write: the whole register after a register, floating point or CSR write, the bytes at the
+         * address after a memory write at the width it was made, and the address the instruction
+         * set after a PC restore. 0 for an action that wrote no value of its own.
+         *
+         * The two fields are one value in two widths; see them for why the store is split.
+         */
+        public long getNewValue() {
+            switch (action) {
+                case REGISTER_RESTORE:
+                case FLOATING_POINT_REGISTER_RESTORE:
+                case CONTROL_AND_STATUS_REGISTER_RESTORE:
+                case CONTROL_AND_STATUS_REGISTER_BACKDOOR:
+                case MEMORY_RESTORE_DOUBLE_WORD:
+                    return param3Long;
+                case MEMORY_RESTORE_RAW_WORD:
+                case MEMORY_RESTORE_WORD:
+                case MEMORY_RESTORE_HALF:
+                case MEMORY_RESTORE_BYTE:
+                case PC_RESTORE:
+                    return param3Int;
+                default:
+                    return 0;
+            }
         }
     }
 
@@ -706,21 +797,35 @@ public class BackStepper {
         // Moves the top onto the slot the next entry is written into, dropping the oldest entry
         // once the stack is full.
         private void advance() {
-            if (size == 0) {
-                top = 0;
+            // The wrap is a comparison rather than a remainder. `capacity` is not a constant, so
+            // `%` is a real division in the generated JavaScript, and this runs two or three times
+            // per simulated instruction - it is what pays for the written value each push now
+            // stores. The walk is the same as before: the top moves up one and wraps at the
+            // capacity, and the size stops growing once the stack is full, from which point the
+            // entry the top lands on is the oldest one, overwritten as it always was.
+            int next = top + 1;
+            top = (next == capacity) ? 0 : next;
+            if (size < capacity) {
                 size++;
-            } else if (size < capacity) {
-                top = (top + 1) % capacity;
-                size++;
-            } else { // size == capacity.  The top moves up one, replacing oldest entry (goodbye!)
-                top = (top + 1) % capacity;
             }
         }
 
-        private void push(Action act, int programCounter, int parm1, long parm2) {
+        /**
+         * The one push: every entry of the stack is written here, so this is the whole of the
+         * bookkeeping a simulated instruction pays for its history and it is kept to one body. The
+         * value the write left travels in the width the caller already holds it in - `wroteInt` for
+         * the sized memory writes and the program counter, `wroteLong` for a register, floating
+         * point or CSR write and for an `sd` - because TeaVM compiles a Java long into an object
+         * and widening an int into one allocates, which a jump would pay on every iteration of a
+         * loop. An action with no written value of its own passes zero for both; see BackStep's
+         * param3 fields for which one each action reads back.
+         */
+        private void push(Action act, int programCounter, int parm1, long parm2, int wroteInt, long wroteLong) {
             // While a poke is open no instruction is running, so every recorded restore is one of
             // its writes: it is collected rather than pushed, and the whole transaction is pushed
-            // as one entry by endPoke(), whichever write path each of them came through.
+            // as one entry by endPoke(), whichever write path each of them came through. The
+            // written value is dropped here on purpose: a poke reports both sides of every value it
+            // wrote through its own writes, read at endPoke().
             if (pokeGroup != NO_POKE_GROUP) {
                 pokeRestores.add(new PokeRestore(act, parm1, parm2));
                 return;
@@ -728,7 +833,15 @@ public class BackStepper {
             advance();
             // We'll re-use existing objects rather than create/discard each time.
             // Must use assign() method rather than series of assignment statements!
-            stack[top].assign(act, programCounter, parm1, parm2);
+            BackStep step = stack[top];
+            step.assign(act, programCounter, parm1, parm2);
+            step.param3Int = wroteInt;
+            step.param3Long = wroteLong;
+        }
+
+        // For an action that records no written value of its own.
+        private void push(Action act, int programCounter, int parm1, long parm2) {
+            push(act, programCounter, parm1, parm2, 0, 0);
         }
 
         // The one entry a finished poke becomes. It is pushed by endPoke(), after the transaction

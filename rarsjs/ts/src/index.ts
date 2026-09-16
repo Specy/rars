@@ -335,9 +335,45 @@ export interface JsBackStep {
     readonly param1: number;
 
     /**
-     * Information about the action
+     * Information about the action. A 64 bit value is truncated to 32 bits here, as it always has
+     * been; read `oldValue` for the whole of it.
      */
     readonly param2: number;
+
+    /**
+     * The value this step replaced, as the simulator saw it at the write, whole and untruncated.
+     *
+     * Every value of this target is 64 bits wide, which no JS number holds, so it is a **signed
+     * decimal string**, the shape `JsPokeRegisterWrite` and `getRegistersValuesLong` already use:
+     * read it with `BigInt(step.oldValue)`, and with `BigInt.asUintN(64, BigInt(step.oldValue))`
+     * for the unsigned form.
+     *
+     * - `REGISTER_RESTORE`, `FLOATING_POINT_REGISTER_RESTORE`,
+     *   `CONTROL_AND_STATUS_REGISTER_RESTORE`, `CONTROL_AND_STATUS_REGISTER_BACKDOOR`: the whole
+     *   register before the write.
+     * - `MEMORY_RESTORE_RAW_WORD`, `MEMORY_RESTORE_WORD`, `MEMORY_RESTORE_DOUBLE_WORD`,
+     *   `MEMORY_RESTORE_HALF`, `MEMORY_RESTORE_BYTE`: the bytes the write replaced, at the width it
+     *   was made, in the low order bits.
+     * - `PC_RESTORE`: the address the restore puts back - the same value as `param1`, which is
+     *   where this action has always kept it, its `param2` being unused and 0.
+     * - `'0'` for `CONTROL_AND_STATUS_COUNTERS_DECREMENT`, `DO_NOTHING` and `POKE`, which replace
+     *   no single value; a Poke reports both sides of everything it wrote through its own `writes`.
+     */
+    readonly oldValue: string;
+
+    /**
+     * The value the write left, beside the `oldValue` it replaced, taken at the store: a register
+     * write reports the whole register after it, a memory write the bytes it left at the width it
+     * was made, and `PC_RESTORE` the address the instruction set. Same encoding as `oldValue`.
+     *
+     * `CONTROL_AND_STATUS_REGISTER_BACKDOOR` is the simulator sampling the wall clock into `time`
+     * rather than a program writing a register, but it is a write all the same and reports the
+     * millisecond reading it stored. `'0'` for `CONTROL_AND_STATUS_COUNTERS_DECREMENT` and
+     * `DO_NOTHING`, which write no value of their own, and for `POKE`, whose `writes` carry both
+     * sides already.
+     */
+    readonly newValue: string;
+
     /**
      * The program counter value before the action, or -1 for an action that belongs to no
      * instruction: a Poke, or a host write made before anything ran.
@@ -753,14 +789,18 @@ export interface JsRiscV {
      * several of them - it records the values it overwrote and the counter decrement - while a Poke
      * is exactly one, the element with `isPoke` set, whatever it wrote. Use `getUndoGroups` to read
      * the history the way `undo()` pops it, one entry per instruction or Poke.
+     *
+     * Every step that restores a value reports both sides of the write it undoes, as `oldValue` and
+     * `newValue`.
      * @returns An array of `JsBackStep` objects representing the history of the simulation.
      */
     getUndoStack(): JsBackStep[];
 
     /**
      * Gets the undo history grouped the way `undo()` pops it: one entry per executed instruction or
-     * per Poke, newest first, each carrying the back steps it is made of. A Poke entry also carries
-     * what it changed, with the old and the new value of each write.
+     * per Poke, newest first, each carrying the back steps it is made of, every one of which
+     * reports both sides of the write it undoes as `oldValue` and `newValue`. A Poke entry also
+     * carries what it changed, with the old and the new value of each write.
      */
     getUndoGroups(): JsUndoGroup[];
 
