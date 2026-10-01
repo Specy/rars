@@ -503,6 +503,14 @@ public class Simulator extends Observable {
                     } catch (ExitingException e) {
                         if (e.error() == null) {
                             this.constructReturnReason = Reason.NORMAL_TERMINATION;
+                            // The exit is an instruction like any other, so it gets the entry the
+                            // 7/26/06 addition above gives every instruction. Without it the history
+                            // ends on the instruction before the exit: a host reading the last
+                            // executed instruction off it names that one, and one undo after the
+                            // exit rolls back two instructions.
+                            if (backStepping) {
+                                backStepper.addDoNothing(pc);
+                            }
                         } else {
                             this.constructReturnReason = Reason.EXCEPTION;
                             this.pe = e;

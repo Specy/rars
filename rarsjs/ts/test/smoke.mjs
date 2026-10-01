@@ -1444,3 +1444,59 @@ loop:
 }
 
 console.log('ok - written values: registers, memory at its width, the pc, lossless across 64 bits')
+
+// The exit is an entry of the history like any other instruction: the 7/26/06 do-nothing entry
+// every instruction gets was skipped on the exit path, so the newest entry after an exit was the
+// instruction before the exit. A host that reads the last executed instruction off the history then
+// named that one, and one undo after an exit rolled back two instructions. The program goes on past
+// the exit, as one with functions below `main` does.
+{
+    RISCV.setIs64Bit(false)
+    const makeExiting = () => {
+        const program = makeSingleFileRiscV(`
+    .text
+    .globl main
+main:
+    li   t0, 1
+    li   a7, 10
+    ecall
+helper:
+    addi t0, t0, 1
+    ret
+`)
+        registerHandlers(program, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+        program.setUndoSize(100)
+        const assembled = program.assemble()
+        assert.equal(assembled.hasErrors, false, `exit assembly failed: ${assembled.report}`)
+        program.initialize(true)
+        return program
+    }
+    const a7 = RISCV_REGISTERS.indexOf('a7')
+    const exitsOnTheEcall = (program, label) => {
+        const [setA7, ecall] = Array.from(program.getCompiledStatements()).slice(1, 3)
+        const [top, below] = Array.from(program.getUndoGroups())
+        assert.equal(top.kind, 'instruction', `${label}: the newest entry is an instruction`)
+        assert.equal(top.pc, ecall.address, `${label}: and it is the exit ecall`)
+        assert.deepEqual(top.steps.map(step => step.action), [BackStepAction.DO_NOTHING],
+            `${label}: which wrote nothing, and was not counted as retired`)
+        assert.equal(below.pc, setA7.address, `${label}: the entry below it is the instruction before the exit`)
+        return ecall
+    }
+
+    const ran = makeExiting()
+    assert.equal(await ran.simulateWithLimit(1_000), StopReason.NORMAL_TERMINATION)
+    const ecall = exitsOnTheEcall(ran, 'run')
+    ran.undo()
+    assert.equal(ran.programCounter, ecall.address, 'one undo puts the program back on the exit ecall')
+    assert.equal(Array.from(ran.getRegistersValues())[a7], 10, 'and leaves the instruction before it done')
+    assert.equal(await ran.step(), StopReason.NORMAL_TERMINATION, 'stepping the ecall exits again')
+    exitsOnTheEcall(ran, 'run, undone and stepped')
+
+    const stepped = makeExiting()
+    let reason
+    for (let i = 0; i < 3; i++) reason = await stepped.step()
+    assert.equal(reason, StopReason.NORMAL_TERMINATION, 'the third step is the exit')
+    exitsOnTheEcall(stepped, 'step')
+}
+
+console.log('ok - exit: the exit ecall is the newest history entry and undoes on its own')
