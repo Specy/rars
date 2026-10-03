@@ -540,7 +540,7 @@ public class Simulator extends Observable {
                 if (--timeSampleCountdown <= 0) {
                     timeSampleCountdown = TIME_SAMPLE_INSTRUCTIONS;
                     ControlAndStatusRegisterFile.updateRegisterBackdoor(timeRegister,
-                            System.currentTimeMillis());
+                            System.currentTimeMillis(), pc);
                 }
 
                 //     Return if we've reached a breakpoint.

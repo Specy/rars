@@ -507,7 +507,12 @@ public class BackStepper {
      * @return the argument value
      */
     public long addControlAndStatusBackdoor(int register, long value, long newValue) {
-        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_BACKDOOR, pc(), register, value, 0, newValue);
+        return addControlAndStatusBackdoor(register, value, newValue, pc());
+    }
+
+    /** Records a write made after a branch against the instruction's original address. */
+    public long addControlAndStatusBackdoor(int register, long value, long newValue, int programCounter) {
+        backSteps.push(Action.CONTROL_AND_STATUS_REGISTER_BACKDOOR, programCounter, register, value, 0, newValue);
         return value;
     }
 

@@ -1,6 +1,7 @@
 package app.specy.rars.riscv.hardware;
 
 import app.specy.rars.Globals;
+import app.specy.rars.riscv.Instruction;
 
 import java.util.Observer;
 
@@ -147,6 +148,17 @@ public class ControlAndStatusRegisterFile {
      * @param val      The desired value for the register.
      **/
     public static void updateRegisterBackdoor(Register register, long val) {
+        updateRegisterBackdoor(register, val,
+                RegisterFile.getProgramCounter() - Instruction.INSTRUCTION_LENGTH);
+    }
+
+    /**
+     * Records a silent write against the instruction that made it. The simulator samples time
+     * after executing an instruction, when a branch may already have changed the program counter.
+     *
+     * @param programCounter The address of the instruction that owns the write.
+     */
+    public static void updateRegisterBackdoor(Register register, long val, int programCounter) {
         settleCounters();
         long old = register.setValueBackdoor(val);
         // Writing a register the value it already holds is not a change, and its undo entry would
@@ -158,7 +170,8 @@ public class ControlAndStatusRegisterFile {
             // `val` is what the register now holds: setValueBackdoor stores it verbatim, whatever
             // kind of register this is, so the entry reports it as the value written without
             // reading anything back.
-            Globals.program.getBackStepper().addControlAndStatusBackdoor(register.getNumber(), old, val);
+            Globals.program.getBackStepper().addControlAndStatusBackdoor(
+                    register.getNumber(), old, val, programCounter);
         }
     }
 
