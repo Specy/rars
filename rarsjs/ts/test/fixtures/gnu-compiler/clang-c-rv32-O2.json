@@ -1,0 +1,1782 @@
+{
+  "captured": "2026-10-04",
+  "compilerId": "rv32-cclang2110",
+  "width": 32,
+  "language": "c",
+  "optimization": 2,
+  "source": "volatile int seed = 3;\nint total;\nconst unsigned char bytes[] = {15, 0, 255};\nconst unsigned char *pointer = bytes;\n__attribute__((noinline)) int twice(int n) { return n * 2; }\nint __asm_editor_main(void) {\n    int sum = 0;\n    for (int i = 0; i < seed; i++) sum += twice(i + 1);\n    total = sum;\n    return total + pointer[0] + pointer[2];\n}\n",
+  "flags": "-O2 -g1 -ffreestanding -fno-stack-protector -fno-pie -march=rv32imfd -mabi=ilp32d ",
+  "expected": 282,
+  "response": {
+    "code": 0,
+    "asm": [
+      {
+        "text": "        .attribute      4, 16",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .attribute      5, \"rv32i2p1_m2p0_f2p2_d2p2_zicsr2p0_zmmul1p0\"",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .file   \"example.c\"",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .text",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .globl  twice                           # -- Begin function twice",
+        "source": null,
+        "labels": [
+          {
+            "name": "twice",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .p2align        2",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .type   twice,@function",
+        "source": null,
+        "labels": [
+          {
+            "name": "twice",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "twice:                                  # @twice",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lfunc_begin0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .file   0 \"/app\" \"/app/example.c\" md5 0xd718e098cbc2401b3c907656f2d2b7a0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_sections .debug_frame",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_startproc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "# %bb.0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .file   1 \"example.c\" md5 0xd718e098cbc2401b3c907656f2d2b7a0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 5 55 prologue_end             # example.c:5:55",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        slli    a0, a0, 1",
+        "source": {
+          "file": null,
+          "line": 5,
+          "column": 55
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 5 46 is_stmt 0                # example.c:5:46",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        ret",
+        "source": {
+          "file": null,
+          "line": 5,
+          "column": 46
+        },
+        "labels": []
+      },
+      {
+        "text": ".Ltmp0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lfunc_end0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   twice, .Lfunc_end0-twice",
+        "source": null,
+        "labels": [
+          {
+            "name": "twice",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          },
+          {
+            "name": ".Lfunc_end0",
+            "range": {
+              "startCol": 24,
+              "endCol": 35
+            }
+          },
+          {
+            "name": "twice",
+            "range": {
+              "startCol": 36,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .cfi_endproc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "                                        # -- End function",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .globl  __asm_editor_main               # -- Begin function __asm_editor_main",
+        "source": null,
+        "labels": [
+          {
+            "name": "__asm_editor_main",
+            "range": {
+              "startCol": 17,
+              "endCol": 34
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .p2align        2",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .type   __asm_editor_main,@function",
+        "source": null,
+        "labels": [
+          {
+            "name": "__asm_editor_main",
+            "range": {
+              "startCol": 17,
+              "endCol": 34
+            }
+          }
+        ]
+      },
+      {
+        "text": "__asm_editor_main:                      # @__asm_editor_main",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lfunc_begin1:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 6 0 is_stmt 1                 # example.c:6:0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_startproc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "# %bb.0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        addi    sp, sp, -16",
+        "source": {
+          "file": null,
+          "line": 6
+        },
+        "labels": []
+      },
+      {
+        "text": "        .cfi_def_cfa_offset 16",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        sw      ra, 12(sp)                      # 4-byte Folded Spill",
+        "source": {
+          "file": null,
+          "line": 6
+        },
+        "labels": []
+      },
+      {
+        "text": "        sw      s0, 8(sp)                       # 4-byte Folded Spill",
+        "source": {
+          "file": null,
+          "line": 6
+        },
+        "labels": []
+      },
+      {
+        "text": "        sw      s1, 4(sp)                       # 4-byte Folded Spill",
+        "source": {
+          "file": null,
+          "line": 6
+        },
+        "labels": []
+      },
+      {
+        "text": "        sw      s2, 0(sp)                       # 4-byte Folded Spill",
+        "source": {
+          "file": null,
+          "line": 6
+        },
+        "labels": []
+      },
+      {
+        "text": "        .cfi_offset ra, -4",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_offset s0, -8",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_offset s1, -12",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_offset s2, -16",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Ltmp1:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 8 25 prologue_end             # example.c:8:25",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lui     s2, %hi(.L_MergedGlobals)",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 25
+        },
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 25,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        lw      a0, %lo(.L_MergedGlobals)(s2)",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 25
+        },
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 25,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .loc    1 8 5 is_stmt 0                 # example.c:8:5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        blez    a0, .LBB1_3",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 5
+        },
+        "labels": [
+          {
+            "name": ".LBB1_3",
+            "range": {
+              "startCol": 21,
+              "endCol": 28
+            }
+          }
+        ]
+      },
+      {
+        "text": "# %bb.1:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 0 5                           # example.c:0:5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        li      s0, 0",
+        "source": {
+          "file": null,
+          "line": 0,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        li      s1, 0",
+        "source": {
+          "file": null,
+          "line": 0,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": ".LBB1_2:                                # =>This Inner Loop Header: Depth=1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 8 51 is_stmt 1                # example.c:8:51",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        addi    s0, s0, 1",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 51
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 8 43 is_stmt 0                # example.c:8:43",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        mv      a0, s0",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 43
+        },
+        "labels": []
+      },
+      {
+        "text": "        call    twice",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 43
+        },
+        "labels": [
+          {
+            "name": "twice",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": ".Ltmp2:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 8 25                          # example.c:8:25",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lw      a1, %lo(.L_MergedGlobals)(s2)",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 25
+        },
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 25,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .loc    1 8 40                          # example.c:8:40",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        add     s1, a0, s1",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 40
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 8 5                           # example.c:8:5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        blt     s0, a1, .LBB1_2",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 5
+        },
+        "labels": [
+          {
+            "name": ".LBB1_2",
+            "range": {
+              "startCol": 25,
+              "endCol": 32
+            }
+          }
+        ]
+      },
+      {
+        "text": "        j       .LBB1_4",
+        "source": {
+          "file": null,
+          "line": 8,
+          "column": 5
+        },
+        "labels": [
+          {
+            "name": ".LBB1_4",
+            "range": {
+              "startCol": 17,
+              "endCol": 24
+            }
+          }
+        ]
+      },
+      {
+        "text": ".LBB1_3:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 0 5                           # example.c:0:5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        li      s1, 0",
+        "source": {
+          "file": null,
+          "line": 0,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": ".LBB1_4:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 10 20 is_stmt 1               # example.c:10:20",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lui     a0, %hi(.L_MergedGlobals+4)",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 20
+        },
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 25,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        lw      a0, %lo(.L_MergedGlobals+4)(a0)",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 20
+        },
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 25,
+              "endCol": 41
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .loc    1 9 11                          # example.c:9:11",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lui     a1, %hi(total)",
+        "source": {
+          "file": null,
+          "line": 9,
+          "column": 11
+        },
+        "labels": [
+          {
+            "name": "total",
+            "range": {
+              "startCol": 25,
+              "endCol": 30
+            }
+          }
+        ]
+      },
+      {
+        "text": "        sw      s1, %lo(total)(a1)",
+        "source": {
+          "file": null,
+          "line": 9,
+          "column": 11
+        },
+        "labels": [
+          {
+            "name": "total",
+            "range": {
+              "startCol": 25,
+              "endCol": 30
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .loc    1 10 20                         # example.c:10:20",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lbu     a1, 0(a0)",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 20
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 10 33 is_stmt 0               # example.c:10:33",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lbu     a0, 2(a0)",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 33
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 10 18                         # example.c:10:18",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        add     a1, s1, a1",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 18
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 10 31                         # example.c:10:31",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        add     a0, a1, a0",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 31
+        },
+        "labels": []
+      },
+      {
+        "text": "        .loc    1 10 5 epilogue_begin           # example.c:10:5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        lw      ra, 12(sp)                      # 4-byte Folded Reload",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        lw      s0, 8(sp)                       # 4-byte Folded Reload",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        lw      s1, 4(sp)                       # 4-byte Folded Reload",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        lw      s2, 0(sp)                       # 4-byte Folded Reload",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        .cfi_restore ra",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_restore s0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_restore s1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .cfi_restore s2",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        addi    sp, sp, 16",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": "        .cfi_def_cfa_offset 0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        ret",
+        "source": {
+          "file": null,
+          "line": 10,
+          "column": 5
+        },
+        "labels": []
+      },
+      {
+        "text": ".Ltmp3:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lfunc_end1:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   __asm_editor_main, .Lfunc_end1-__asm_editor_main",
+        "source": null,
+        "labels": [
+          {
+            "name": "__asm_editor_main",
+            "range": {
+              "startCol": 17,
+              "endCol": 34
+            }
+          },
+          {
+            "name": ".Lfunc_end1",
+            "range": {
+              "startCol": 36,
+              "endCol": 47
+            }
+          },
+          {
+            "name": "__asm_editor_main",
+            "range": {
+              "startCol": 48,
+              "endCol": 65
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .cfi_endproc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "                                        # -- End function",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .type   bytes,@object                   # @bytes",
+        "source": null,
+        "labels": [
+          {
+            "name": "bytes",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .section        .rodata,\"a\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .globl  bytes",
+        "source": null,
+        "labels": [
+          {
+            "name": "bytes",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "bytes:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .ascii  \"\\017\\000\\377\"",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   bytes, 3",
+        "source": null,
+        "labels": [
+          {
+            "name": "bytes",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .type   total,@object                   # @total",
+        "source": null,
+        "labels": [
+          {
+            "name": "total",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .bss",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .globl  total",
+        "source": null,
+        "labels": [
+          {
+            "name": "total",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .p2align        2, 0x0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "total:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   0                               # 0x0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   total, 4",
+        "source": null,
+        "labels": [
+          {
+            "name": "total",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .type   .L_MergedGlobals,@object        # @_MergedGlobals",
+        "source": null,
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 17,
+              "endCol": 33
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .data",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .p2align        2, 0x0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".L_MergedGlobals:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   3                               # 0x3",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   bytes",
+        "source": null,
+        "labels": [
+          {
+            "name": "bytes",
+            "range": {
+              "startCol": 17,
+              "endCol": 22
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .size   .L_MergedGlobals, 8",
+        "source": null,
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 17,
+              "endCol": 33
+            }
+          }
+        ]
+      },
+      {
+        "text": "",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .globl  seed",
+        "source": null,
+        "labels": [
+          {
+            "name": "seed",
+            "range": {
+              "startCol": 17,
+              "endCol": 21
+            }
+          }
+        ]
+      },
+      {
+        "text": "seed = .L_MergedGlobals",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   seed, 4",
+        "source": null,
+        "labels": [
+          {
+            "name": "seed",
+            "range": {
+              "startCol": 17,
+              "endCol": 21
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .globl  pointer",
+        "source": null,
+        "labels": [
+          {
+            "name": "pointer",
+            "range": {
+              "startCol": 17,
+              "endCol": 24
+            }
+          }
+        ]
+      },
+      {
+        "text": "pointer = .L_MergedGlobals+4",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .size   pointer, 4",
+        "source": null,
+        "labels": [
+          {
+            "name": "pointer",
+            "range": {
+              "startCol": 17,
+              "endCol": 24
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .section        .debug_abbrev,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   1                               # Abbreviation Code",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   17                              # DW_TAG_compile_unit",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # DW_CHILDREN_no",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   37                              # DW_AT_producer",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   37                              # DW_FORM_strx1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   19                              # DW_AT_language",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   5                               # DW_FORM_data2",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   3                               # DW_AT_name",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   37                              # DW_FORM_strx1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   114                             # DW_AT_str_offsets_base",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   23                              # DW_FORM_sec_offset",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   16                              # DW_AT_stmt_list",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   23                              # DW_FORM_sec_offset",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   27                              # DW_AT_comp_dir",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   37                              # DW_FORM_strx1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   17                              # DW_AT_low_pc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   27                              # DW_FORM_addrx",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   18                              # DW_AT_high_pc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   6                               # DW_FORM_data4",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   115                             # DW_AT_addr_base",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   23                              # DW_FORM_sec_offset",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # EOM(1)",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # EOM(2)",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # EOM(3)",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .section        .debug_info,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lcu_begin0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Ldebug_info_end0-.Ldebug_info_start0 # Length of Unit",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Ldebug_info_end0",
+            "range": {
+              "startCol": 17,
+              "endCol": 34
+            }
+          },
+          {
+            "name": ".Ldebug_info_start0",
+            "range": {
+              "startCol": 35,
+              "endCol": 54
+            }
+          }
+        ]
+      },
+      {
+        "text": ".Ldebug_info_start0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .half   5                               # DWARF version number",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   1                               # DWARF Unit Type",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   4                               # Address Size (in bytes)",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .debug_abbrev                   # Offset Into Abbrev. Section",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   1                               # Abbrev [1] 0xc:0x17 DW_TAG_compile_unit",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # DW_AT_producer",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .half   29                              # DW_AT_language",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   1                               # DW_AT_name",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Lstr_offsets_base0             # DW_AT_str_offsets_base",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Lstr_offsets_base0",
+            "range": {
+              "startCol": 17,
+              "endCol": 36
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .word   .Lline_table_start0             # DW_AT_stmt_list",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Lline_table_start0",
+            "range": {
+              "startCol": 17,
+              "endCol": 36
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .byte   2                               # DW_AT_comp_dir",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # DW_AT_low_pc",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Lfunc_end1-.Lfunc_begin0       # DW_AT_high_pc",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Lfunc_end1",
+            "range": {
+              "startCol": 17,
+              "endCol": 28
+            }
+          },
+          {
+            "name": ".Lfunc_begin0",
+            "range": {
+              "startCol": 29,
+              "endCol": 42
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .word   .Laddr_table_base0              # DW_AT_addr_base",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Laddr_table_base0",
+            "range": {
+              "startCol": 17,
+              "endCol": 35
+            }
+          }
+        ]
+      },
+      {
+        "text": ".Ldebug_info_end0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .section        .debug_str_offsets,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   16                              # Length of String Offsets Set",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .half   5",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .half   0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lstr_offsets_base0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .section        .debug_str,\"MS\",@progbits,1",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Linfo_string0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .asciz  \"clang version 21.1.0 (https://github.com/llvm/llvm-project.git 3623fe661ae35c6c80ac221f14d85be76aa870f1)\" # string offset=0",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Linfo_string1:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .asciz  \"/app/example.c\"                # string offset=105",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Linfo_string2:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .asciz  \"/app\"                          # string offset=120",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .section        .debug_str_offsets,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Linfo_string0",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Linfo_string0",
+            "range": {
+              "startCol": 17,
+              "endCol": 31
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .word   .Linfo_string1",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Linfo_string1",
+            "range": {
+              "startCol": 17,
+              "endCol": 31
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .word   .Linfo_string2",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Linfo_string2",
+            "range": {
+              "startCol": 17,
+              "endCol": 31
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .section        .debug_addr,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Ldebug_addr_end0-.Ldebug_addr_start0 # Length of contribution",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Ldebug_addr_end0",
+            "range": {
+              "startCol": 17,
+              "endCol": 34
+            }
+          },
+          {
+            "name": ".Ldebug_addr_start0",
+            "range": {
+              "startCol": 35,
+              "endCol": 54
+            }
+          }
+        ]
+      },
+      {
+        "text": ".Ldebug_addr_start0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .half   5                               # DWARF version number",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   4                               # Address size",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .byte   0                               # Segment selector size",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Laddr_table_base0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .word   .Lfunc_begin0",
+        "source": null,
+        "labels": [
+          {
+            "name": ".Lfunc_begin0",
+            "range": {
+              "startCol": 17,
+              "endCol": 30
+            }
+          }
+        ]
+      },
+      {
+        "text": ".Ldebug_addr_end0:",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .ident  \"clang version 21.1.0 (https://github.com/llvm/llvm-project.git 3623fe661ae35c6c80ac221f14d85be76aa870f1)\"",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .section        \".note.GNU-stack\",\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .addrsig",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": "        .addrsig_sym bytes",
+        "source": null,
+        "labels": [
+          {
+            "name": "bytes",
+            "range": {
+              "startCol": 22,
+              "endCol": 27
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .addrsig_sym .L_MergedGlobals",
+        "source": null,
+        "labels": [
+          {
+            "name": ".L_MergedGlobals",
+            "range": {
+              "startCol": 22,
+              "endCol": 38
+            }
+          }
+        ]
+      },
+      {
+        "text": "        .section        .debug_line,\"\",@progbits",
+        "source": null,
+        "labels": []
+      },
+      {
+        "text": ".Lline_table_start0:",
+        "source": null,
+        "labels": []
+      }
+    ]
+  },
+  "oracle": {
+    "toolchain": "GNU assembler (GNU Binutils for Ubuntu) 2.46",
+    "preparation": "Same startup and debug-section removal as the Core harness. Drop file/loc/CFI metadata; hoist ISA attributes before startup for GNU as.",
+    "assemblerArguments": [
+      "-L",
+      "-march=rv32imfd",
+      "-mabi=ilp32d",
+      "-mno-relax",
+      "-o",
+      "/tmp/compat-reference.o",
+      "/tmp/compat-reference.s"
+    ],
+    "linkerScript": "SECTIONS {\n . = 0x00400000;\n \".text\" : { *(\".text\") }\n . = 0x10010000;\n \".rodata\" : { *(\".rodata\") }\n \".data\" : { *(\".data\") }\n \".bss\" : { *(\".bss\") }\n .common : { *(COMMON) }\n /DISCARD/ : { *(.riscv.attributes) *(.eh_frame) *(.note.GNU-stack) *(.debug*) *(.comment) }\n}\n",
+    "noMergeFlags": [
+      "--set-section-flags",
+      ".rodata=alloc,load,readonly,data,contents"
+    ],
+    "sections": [
+      {
+        "name": ".text",
+        "address": 4194304,
+        "bytes": [
+          19,
+          113,
+          1,
+          255,
+          151,
+          0,
+          0,
+          0,
+          231,
+          128,
+          128,
+          1,
+          147,
+          8,
+          208,
+          5,
+          115,
+          0,
+          0,
+          0,
+          19,
+          21,
+          21,
+          0,
+          103,
+          128,
+          0,
+          0,
+          19,
+          1,
+          1,
+          255,
+          35,
+          38,
+          17,
+          0,
+          35,
+          36,
+          129,
+          0,
+          35,
+          34,
+          145,
+          0,
+          35,
+          32,
+          33,
+          1,
+          55,
+          9,
+          1,
+          16,
+          3,
+          37,
+          73,
+          0,
+          99,
+          86,
+          160,
+          2,
+          19,
+          4,
+          0,
+          0,
+          147,
+          4,
+          0,
+          0,
+          19,
+          4,
+          20,
+          0,
+          19,
+          5,
+          4,
+          0,
+          151,
+          0,
+          0,
+          0,
+          231,
+          128,
+          128,
+          252,
+          131,
+          37,
+          73,
+          0,
+          179,
+          4,
+          149,
+          0,
+          227,
+          68,
+          180,
+          254,
+          111,
+          0,
+          128,
+          0,
+          147,
+          4,
+          0,
+          0,
+          55,
+          5,
+          1,
+          16,
+          3,
+          37,
+          133,
+          0,
+          183,
+          5,
+          1,
+          16,
+          35,
+          166,
+          149,
+          0,
+          131,
+          69,
+          5,
+          0,
+          3,
+          69,
+          37,
+          0,
+          179,
+          133,
+          180,
+          0,
+          51,
+          133,
+          165,
+          0,
+          131,
+          32,
+          193,
+          0,
+          3,
+          36,
+          129,
+          0,
+          131,
+          36,
+          65,
+          0,
+          3,
+          41,
+          1,
+          0,
+          19,
+          1,
+          1,
+          1,
+          103,
+          128,
+          0,
+          0
+        ]
+      },
+      {
+        "name": ".rodata",
+        "address": 268500992,
+        "bytes": [
+          15,
+          0,
+          255
+        ]
+      },
+      {
+        "name": ".data",
+        "address": 268500996,
+        "bytes": [
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          16
+        ]
+      },
+      {
+        "name": ".bss",
+        "address": 268501004,
+        "bytes": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "symbols": {
+      "__asm_editor_main": 4194332,
+      "bytes": 268500992,
+      "main": 4194304,
+      "total": 268501004,
+      "twice": 4194324
+    }
+  }
+}

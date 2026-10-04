@@ -103,7 +103,7 @@ public class SyscallLoader {
         add(new SyscallTime());
 
         add(new SyscallGetCWD());
-        //add(new SyscallLSeek());
+        add(new SyscallLSeek());
 
         syscallList = processSyscallNumberOverrides(syscallList);
     }

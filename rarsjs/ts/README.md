@@ -13,6 +13,16 @@ First, create an instance of the simulator with `makeRiscVFromFiles`. Supply a v
 
 Before running the simulator, you must assemble and initialize it. You can then step through the program, simulate with breakpoints, or simulate with a limit.
 
+The optional third factory argument selects the assembly profile:
+
+```typescript
+const core = makeRiscVFromFiles(files, 'main.s', { assemblerProfile: 'gnu-compiler-v1' });
+```
+
+Omission selects `rars`. `RISCV.assemblerProfiles` lists supported profiles; every present invalid profile throws. GNU compiler v1 provides independent named sections, explicit data alignment, exact eight-byte data, byte-valued string escapes, bounded expressions/aliases, numeric labels, and absolute/PC-relative address fixups. It uses fixed instruction expansions and rejects unsupported directives, ISA attributes, relocations and unresolved runtime helpers. Units link with ld semantics: global and weak symbols (an undefined weak reference is zero), COMDAT groups (the first copy is kept), and `.init_array`/`.fini_array` with ld-provided `__init_array_start`/`__init_array_end` bounds. Global labels enter the global symbol table, so the start label finds them. It does not load or link ELF, compressed/vector instructions, TLS or a standard library. RARS retains its existing educational syntax and macros.
+
+`getAddressOfLabel(name)` returns a defined label/alias address after successful assembly, or `-1` when absent. Profile state is per program; width, memory and execution state retain the existing single-instance constraint.
+
 ⚠️**WARNING**⚠️ You must have only one instance of the simulator at a time. Memory, registers, and other state may be shared or behave unpredictably with multiple instances.
 
 ```typescript

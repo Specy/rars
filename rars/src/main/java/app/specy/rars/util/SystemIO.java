@@ -273,8 +273,9 @@ public class SystemIO {
         // retrieve FileInputStream from storage
         try {
             if(fd == STDIN) {
-                io.stdIn(myBuffer, lengthRequested);
-                return 0;
+                int count = io.stdIn(myBuffer, lengthRequested);
+                if (count < 0) fileErrorString = "IO Exception on read of standard input";
+                return count < 0 ? -1 : Math.min(count, lengthRequested);
             } else if (fd == STDOUT || fd == STDERR) {
                 throw new RISCVIOError("Cannot read from STDOUT or STDERR");
             }
@@ -306,45 +307,22 @@ public class SystemIO {
      * @return -1 on error
      */
     public static int seek(int fd, int offset, int base) {
-        //TODO
-        /*
-        if (!FileIOData.fdInUse(fd, 0)) // Check the existence of the "read" fd
-        {
-            fileErrorString = "File descriptor " + fd + " is not open for reading";
+        // Descriptors above STDERR belong to the host, which knows whether one is open; the
+        // standard streams are a terminal and have no position.
+        if (fd <= STDERR) {
+            fileErrorString = "File descriptor " + fd + " cannot seek";
             return -1;
         }
-        if (fd < 0 || fd >= SYSCALL_MAXFILES) return -1;
-        Object stream = FileIOData.getStreamInUse(fd);
-        if (stream == null) return -1;
-        FileChannel channel;
+        if (base != SEEK_SET && base != SEEK_CUR && base != SEEK_END) {
+            fileErrorString = "Invalid seek origin " + base;
+            return -1;
+        }
         try {
-            if (stream instanceof FileInputStream) {
-                channel = ((FileInputStream) stream).getChannel();
-            } else if (stream instanceof FileOutputStream) {
-                channel = ((FileOutputStream) stream).getChannel();
-            } else {
-                return -1;
-            }
-
-            if (base == SEEK_SET) {
-                offset += 0;
-            } else if (base == SEEK_CUR) {
-                offset += channel.position();
-            } else if (base == SEEK_END) {
-                offset += channel.size();
-            } else {
-                return -1;
-            }
-            if (offset < 0) {
-                return -1;
-            }
-            channel.position(offset);
-            return offset;
-        } catch (IOException io) {
+            return io.seekFile(fd, offset, base);
+        } catch (RISCVIOError e) {
+            fileErrorString = "IO Exception on seek of file with fd " + fd;
             return -1;
         }
-        */
-        return -1;
     }
 
     /**

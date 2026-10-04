@@ -363,6 +363,22 @@ public class Binary {
     }
 
     /**
+     * Whether {@code s} starts as every integer {@link #stringToInt} and {@link #stringToLong}
+     * accept does: a digit, or a sign and a digit. Both reject every other string by throwing,
+     * and under TeaVM a thrown exception costs far more than the parse, so callers that try
+     * every operand or identifier check this first.
+     *
+     * @param s candidate string
+     * @return false when neither parser can accept {@code s}
+     */
+    public static boolean startsLikeInteger(String s) {
+        if (s.isEmpty()) return false;
+        char first = s.charAt(0);
+        if ('0' <= first && first <= '9') return true;
+        return (first == '-' || first == '+') && s.length() > 1 && '0' <= s.charAt(1) && s.charAt(1) <= '9';
+    }
+
+    /**
      * Attempt to validate given string whose characters represent a 32 bit integer.
      * Integer.decode() is insufficient because it will not allow incorporation of
      * hex two's complement (i.e. 0x80...0 through 0xff...f).  Allows

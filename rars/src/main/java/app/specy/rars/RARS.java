@@ -48,6 +48,11 @@ public class RARS {
         return this.main.getMachineStatement(address);
     }
 
+    public int getAddressOfLabel(String label) {
+        requireAssembled();
+        return main.getLocalSymbolTable().getAddressLocalOrGlobal(label);
+    }
+
     public List<ProgramStatement> getParsedStatements() {
         requireAssembled();
         return this.main.getParsedList();
@@ -70,12 +75,31 @@ public class RARS {
                 .toList();
     }
 
-    private RARS(String entryFile, MemoryFileSystem files) {
+    private final app.specy.rars.assembler.AssemblerProfile assemblerProfile;
+    private app.specy.rars.assembler.RuntimeLibrary runtimeLibrary;
+    private String entrySymbol;
+
+    /**
+     * Links {@code library}'s members for the globals the program uses and does not define, and
+     * starts execution at {@code entrySymbol} instead of the global {@code main}. The entry symbol
+     * must be defined by the link and pulls its own member. Either may be null.
+     */
+    public void setLinkInputs(app.specy.rars.assembler.RuntimeLibrary library, String entrySymbol) {
+        this.runtimeLibrary = library;
+        this.entrySymbol = entrySymbol == null || entrySymbol.isEmpty() ? null : entrySymbol;
+    }
+
+    private RARS(String entryFile, MemoryFileSystem files, app.specy.rars.assembler.AssemblerProfile profile) {
         this.entryFile = entryFile;
         this.files = files;
+        this.assemblerProfile = java.util.Objects.requireNonNull(profile);
     }
 
     public static RARS fromFs(String entryFile, RISCVFileSystem sourceFiles) {
+        return fromFs(entryFile, sourceFiles, app.specy.rars.assembler.AssemblerProfile.RARS);
+    }
+
+    public static RARS fromFs(String entryFile, RISCVFileSystem sourceFiles, app.specy.rars.assembler.AssemblerProfile profile) {
         SourcePath.requireCanonical(entryFile);
         if (sourceFiles == null) {
             throw new IllegalArgumentException("Source set must be an object");
@@ -99,7 +123,7 @@ public class RARS {
         if (!paths.contains(entryFile)) {
             throw new IllegalArgumentException("Entry file is not present in the source set: " + entryFile);
         }
-        return new RARS(entryFile, snapshot);
+        return new RARS(entryFile, snapshot, profile);
     }
 
     public static void initializeRISCV() {
@@ -114,7 +138,8 @@ public class RARS {
         Globals.symbolTable.clear();
         Globals.memory.clear();
         main = new RISCVprogram();
-        main.prepareForAssembly(entryFile, files);
+        main.prepareForAssembly(entryFile, files, assemblerProfile);
+        main.setLinkInputs(runtimeLibrary, entrySymbol);
         ErrorList result = main.assemble(new java.util.ArrayList<>(List.of(main)), true);
         Globals.program = main;
         assembled = true;
@@ -128,7 +153,8 @@ public class RARS {
         ControlAndStatusRegisterFile.resetRegisters();
         InterruptController.reset();
         ReservationTable.reset();
-        RegisterFile.initializeProgramCounter(true);
+        if (entrySymbol != null) RegisterFile.initializeProgramCounter(entrySymbol);
+        else RegisterFile.initializeProgramCounter(startAtMain);
         Globals.exitCode = 0;
 
         // Copy in assembled code and arguments

@@ -124,6 +124,8 @@ public class ExtendedInstruction extends Instruction {
             instruction = substitute(instruction, "RG" + op, tokenList.get(op).getValue());
 
             String strValue = tokenList.get(op).getValue();
+            // Registers and labels skip the parsers, which reject them only by throwing.
+            if (!Binary.startsLikeInteger(strValue)) continue;
             int val;
             try {
                 val = Binary.stringToInt(strValue);    // KENV   1/6/05

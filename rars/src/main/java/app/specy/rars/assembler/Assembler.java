@@ -65,6 +65,12 @@ public class Assembler {
     private AddressSpace dataAddress;
     private DataSegmentForwardReferences currentFileDataSegmentForwardReferences,
             accumulatedDataSegmentForwardReferences;
+    private RuntimeLibrary runtimeLibrary;
+
+    /** The library whose members resolve globals the program uses without defining, or null. */
+    public void setRuntimeLibrary(RuntimeLibrary library) {
+        this.runtimeLibrary = library;
+    }
 
     /**
      * Get list of assembler errors and warnings
@@ -175,6 +181,36 @@ public class Assembler {
             currentFileDataSegmentForwardReferences.clear();
         } // end of first-pass loop for each RISCVprogram
 
+
+        // Library members resolve the globals the program uses and does not define. They are
+        // linked after its text and data, before the forward data references and the second
+        // pass resolve against the global symbol table, so neither can tell a library global
+        // from one of the program's own. A program that needs no member assembles exactly as
+        // it did without a library.
+        ArrayList<ProgramStatement> libraryStatements = new ArrayList<>();
+        if (runtimeLibrary != null && !errors.errorsOccurred()) {
+            java.util.Set<String> undefined = new java.util.LinkedHashSet<>();
+            for (RISCVprogram program : tokenizedProgramFiles) {
+                for (ProgramStatement statement : program.getParsedList()) {
+                    for (Token token : statement.getOriginalTokenList()) {
+                        if (token.getType() == TokenTypes.IDENTIFIER &&
+                                program.getLocalSymbolTable().getAddressLocalOrGlobal(token.getValue()) == SymbolTable.NOT_FOUND)
+                            undefined.add(token.getValue());
+                    }
+                }
+            }
+            accumulatedDataSegmentForwardReferences.collectUndefined(undefined);
+            boolean needed = false;
+            for (String name : undefined) needed |= runtimeLibrary.defines(name);
+            if (needed) {
+                try {
+                    libraryStatements = new GnuAssembler(new ArrayList<>(), runtimeLibrary, null)
+                            .linkAfter(undefined, textAddress.get(), dataAddress.get());
+                } catch (AssemblyException exception) {
+                    for (ErrorMessage message : exception.errors().getErrorMessages()) errors.add(message);
+                }
+            }
+        }
 
         // Have processed all source files. Attempt to resolve any remaining forward label
         // references from global symbol table. Those that remain unresolved are undefined
@@ -291,6 +327,8 @@ public class Assembler {
                         "Invalid address for text segment: " + e.getAddress()));
             }
         }
+        // The members were written to memory when they were linked.
+        machineList.addAll(libraryStatements);
         // Aug. 24, 2005 Ken Vollmar
         // Ensure that I/O "file descriptors" are initialized for a new program run
         SystemIO.resetFiles();
@@ -1412,6 +1450,13 @@ public class Assembler {
                     i--; // needed because removal shifted the remaining list indices down
                 }
             }
+        }
+
+        // Adds the names still unresolved after the program's own symbol tables.
+        private void collectUndefined(java.util.Set<String> names) {
+            for (DataSegmentForwardReference entry : forwardReferenceList)
+                if (Globals.symbolTable.getAddress(entry.token.getValue()) == SymbolTable.NOT_FOUND)
+                    names.add(entry.token.getValue());
         }
 
         // Call this when you are confident that remaining list entries are to

@@ -21,7 +21,10 @@ public class Comparisons {
             if(b.isInfinite() && a.isSignMinus() == b.isSignMinus()){
                 return 0;
             }else{
-                return a.isSignMinus()?1:-1;
+                // +inf is above everything but itself and -inf below: upstream returned these
+                // the other way round, so fle.d and flt.d put +inf below every finite number and
+                // isfinite(inf), which compilers write as |x| <= DBL_MAX, said true.
+                return a.isSignMinus()?-1:1;
             }
         }
         if(b.isInfinite()){

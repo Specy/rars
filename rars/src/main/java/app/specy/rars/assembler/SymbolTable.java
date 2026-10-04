@@ -5,6 +5,7 @@ import app.specy.rars.ErrorMessage;
 import app.specy.rars.Globals;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -45,6 +46,9 @@ public class SymbolTable {
     private static String startLabel = "main";
     private String filename;
     private ArrayList<Symbol> table;
+    // The same symbols by name: labels are looked up for every operand that names one, and a long
+    // program made the linear search of the list quadratic. Names are unique within a table.
+    private HashMap<String, Symbol> byName = new HashMap<>();
     // Note -1 is legal 32 bit address (0xFFFFFFFF) but it is the high address in
     // kernel address space so highly unlikely that any symbol will have this as
     // its associated address!
@@ -75,7 +79,9 @@ public class SymbolTable {
         if (getSymbol(label) != null) {
             errors.add(new ErrorMessage(token.getSourceProgram(), token.getSourceLine(), token.getStartPos(), "label \"" + label + "\" already defined"));
         } else {
-            table.add(new Symbol(label, address, b));
+            Symbol symbol = new Symbol(label, address, b);
+            table.add(symbol);
+            byName.put(label, symbol);
             if (Globals.debug)
                 System.out.println("The symbol " + label + " with address " + address + " has been added to the " + this.filename + " symbol table.");
         }
@@ -95,6 +101,7 @@ public class SymbolTable {
         for (int i = 0; i < table.size(); i++) {
             if (table.get(i).getName().equals(label)) {
                 table.remove(i);
+                byName.remove(label);
                 if (Globals.debug)
                     System.out.println("The symbol " + label + " has been removed from the " + this.filename + " symbol table.");
                 break;
@@ -110,12 +117,8 @@ public class SymbolTable {
      * @return The memory address of the label given, or NOT_FOUND if not found in symbol table.
      **/
     public int getAddress(String s) {
-        for (Symbol sym : table) {
-            if (sym.getName().equals(s)) {
-                return sym.getAddress();
-            }
-        }
-        return NOT_FOUND;
+        Symbol symbol = byName.get(s);
+        return symbol == null ? NOT_FOUND : symbol.getAddress();
     }
 
     /**
@@ -140,12 +143,7 @@ public class SymbolTable {
      **/
 
     public Symbol getSymbol(String s) {
-        for (Symbol sym : table) {
-            if (sym.getName().equals(s)) {
-                return sym;
-            }
-        }
-        return null;
+        return byName.get(s);
     }
 
     /**
@@ -269,6 +267,7 @@ public class SymbolTable {
 
     public void clear() {
         table = new ArrayList<>();
+        byName = new HashMap<>();
     }
 
     /**

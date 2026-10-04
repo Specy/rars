@@ -138,9 +138,15 @@ public class Arithmetic {
             return add(a.isSignMinus() == b.isSignMinus() ? a.Zero() : a.NegativeZero(), c, env);
         }
 
+        // The product is finite and not zero here. An infinite c is the result, and a zero c leaves
+        // the product rounded once: neither has an exact value to add, as add handles them too.
+        if (c.isInfinite()) return c;
         ExactFloat multiplication = a.toExactFloat().multiply(b.toExactFloat());
-
-        return a.fromExactFloat(multiplication.add(c.toExactFloat()), env);
+        if (c.isZero()) return a.fromExactFloat(multiplication, env);
+        ExactFloat out = multiplication.add(c.toExactFloat());
+        // An exact cancellation is +0, or -0 when rounding down (Section 6.3)
+        if (out.isZero()) return (env.mode == RoundingMode.min) ? a.NegativeZero() : a.Zero();
+        return a.fromExactFloat(out, env);
     }
 
     public static <T extends Floating<T>> T division(T a, T b, Environment env) {

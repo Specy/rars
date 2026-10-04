@@ -64,7 +64,21 @@ public abstract class RISCVIO {
      */
     public abstract double time();
 
-    public abstract void stdIn(byte[] buffer, int length);
+    /**
+     * Reads standard input into {@code buffer}: the bytes left over from the current line, or else
+     * one new line from the user, never more than {@code length}.
+     *
+     * @return the number of bytes read, 0 at end of input, or -1 when the read failed
+     */
+    public abstract int stdIn(byte[] buffer, int length);
+
+    /**
+     * Moves an open file's position.
+     *
+     * @param whence 0 from the start, 1 from the current position, 2 from the end
+     * @return the new position from the start of the file, or -1 when the seek failed
+     */
+    public abstract int seekFile(int fileDescriptor, int offset, int whence) throws RISCVIOError;
 
     public abstract void stdOut(byte[] buffer);
 

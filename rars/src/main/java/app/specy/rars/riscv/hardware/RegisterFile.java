@@ -180,6 +180,13 @@ public class RegisterFile {
         programCounterValue = value;
     }
 
+    /** Starts at the global {@code label} when it names text, and at the reset value otherwise. */
+    public static void initializeProgramCounter(String label) {
+        int address = Globals.symbolTable.getAddress(label);
+        if (address != SymbolTable.NOT_FOUND && Memory.inTextSegment(address)) initializeProgramCounter(address);
+        else initializeProgramCounter((int)programCounter.getResetValue());
+    }
+
     /**
      * Will initialize the Program Counter to either the default reset value, or the address
      * associated with source program global label "main", if it exists as a text segment label

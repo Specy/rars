@@ -55,6 +55,26 @@ public class JsRiscV {
 
     @JSExport
     public static JsRiscV makeRiscVFromFiles(String[] sourcePaths, String[] sources, String entryFile) {
+        return makeRiscVFromFilesWithProfile(sourcePaths, sources, entryFile, "rars");
+    }
+
+    @JSExport
+    public static JsRiscV makeRiscVFromFilesWithProfile(String[] sourcePaths, String[] sources, String entryFile, String profile) {
+        return makeRiscVFromFilesWithOptions(sourcePaths, sources, entryFile, profile, "",
+                new String[0], new String[0], new String[0], new String[0], new String[0]);
+    }
+
+    /**
+     * The factory with every option: the assembler profile, the global execution starts at
+     * (empty for the global main), and one library flattened into members and an index naming
+     * the member that defines each symbol.
+     */
+    @JSExport
+    public static JsRiscV makeRiscVFromFilesWithOptions(String[] sourcePaths, String[] sources, String entryFile,
+                                                        String profile, String entrySymbol,
+                                                        String[] memberPaths, String[] memberSources,
+                                                        String[] indexSymbols, String[] indexMembers,
+                                                        String[] resolveWeak) {
         JsRiscV.getIOHandler(); // Ensure that the IO handler is initialized
         if (sourcePaths == null || sources == null || sourcePaths.length != sources.length) {
             throw new IllegalArgumentException("Source paths and contents must have the same length");
@@ -63,7 +83,25 @@ public class JsRiscV {
         for (int i = 0; i < sourcePaths.length; i++) {
             files.write(sourcePaths[i], sources[i]);
         }
-        return new JsRiscV(RARS.fromFs(entryFile, files));
+        RARS rars = RARS.fromFs(entryFile, files, app.specy.rars.assembler.AssemblerProfile.parse(profile));
+        app.specy.rars.assembler.RuntimeLibrary library = memberPaths == null || memberPaths.length == 0 ? null
+                : new app.specy.rars.assembler.RuntimeLibrary(memberPaths, memberSources, indexSymbols, indexMembers, resolveWeak);
+        rars.setLinkInputs(library, entrySymbol);
+        return new JsRiscV(rars);
+    }
+
+    /**
+     * The globals one GNU compiler unit defines and the ones it needs from elsewhere, for
+     * building a library index. Uses the current width.
+     */
+    @JSExport
+    public static JsUnitSymbols analyzeGnuUnit(String path, String source) {
+        JsRiscV.getIOHandler();
+        try {
+            return new JsUnitSymbols(app.specy.rars.assembler.GnuAssembler.analyze(path, source), null);
+        } catch (AssemblyException e) {
+            return new JsUnitSymbols(null, e.errors());
+        }
     }
 
     @JSExport
@@ -74,6 +112,9 @@ public class JsRiscV {
             return new JsCompilationResult(e.errors());
         }
     }
+
+    @JSExport
+    public int getAddressOfLabel(String label) { return main.getAddressOfLabel(label); }
 
     @JSExport
     public JsRiscVTokenizedLine[] getTokenizedLines() {
@@ -476,6 +517,58 @@ public class JsRiscV {
             result.set(i, groups.get(i));
         }
         return result;
+    }
+
+    /**
+     * The newest {@code max} entries of getUndoGroups(), read from the top of the stack without
+     * copying or grouping the rest of it, which is what a panel showing the latest steps of a large
+     * history needs on every refresh.
+     */
+    @JSExport
+    public JSArray<JSObject> getUndoGroupsUpTo(int max) {
+        return getUndoGroupsRange(0, max);
+    }
+
+    /**
+     * {@code max} entries of getUndoGroups() after skipping the newest {@code skip}: the skipped
+     * ones are only counted, never built, so a panel can show the call that started a long stretch
+     * of history without reading the stretch.
+     */
+    @JSExport
+    public JSArray<JSObject> getUndoGroupsRange(int skip, int max) {
+        BackStepper.BackstepStack stack = this.main.getProgram().getBackStepper().getBackStepsStack();
+        List<JSObject> groups = new ArrayList<>();
+        int start = 0;
+        for (int skipped = 0; skipped < skip && start < stack.size(); skipped++) {
+            int end = start + 1;
+            while (end < stack.size() && BackStepper.sameGroup(stack.fromTop(end - 1), stack.fromTop(end))) end++;
+            start = end;
+        }
+        while (start < stack.size() && groups.size() < max) {
+            int end = start + 1;
+            while (end < stack.size() && BackStepper.sameGroup(stack.fromTop(end - 1), stack.fromTop(end))) end++;
+            JSArray<JSObject> steps = JSArray.create(end - start);
+            for (int i = start; i < end; i++) steps.set(i - start, JsBackStep.of(stack.fromTop(i)));
+            BackStepper.BackStep first = stack.fromTop(start);
+            groups.add(first.isPoke()
+                    ? JsUndoGroup.poke(POKE_PC, steps, writesOfPoke(first.getPokeGroup()))
+                    : JsUndoGroup.instruction(first.getPc(), steps));
+            start = end;
+        }
+        JSArray<JSObject> result = JSArray.create(groups.size());
+        for (int i = 0; i < groups.size(); i++) result.set(i, groups.get(i));
+        return result;
+    }
+
+    /** How many entries undo() can still pop: executed instructions and pokes, as getUndoGroups() counts them. */
+    @JSExport
+    public int getUndoDepth() {
+        BackStepper.BackstepStack stack = this.main.getProgram().getBackStepper().getBackStepsStack();
+        int depth = 0;
+        for (int i = 0; i < stack.size(); i++) {
+            if (i == 0 || !BackStepper.sameGroup(stack.fromTop(i - 1), stack.fromTop(i))) depth++;
+        }
+        return depth;
     }
 
     /*

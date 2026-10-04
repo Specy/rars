@@ -84,6 +84,7 @@ public class InstructionSet {
     public void populate() {
         /* Here is where the parade begins.  Every instruction is added to the set here.*/
         instructionList.clear();
+        byName = null;
         // ////////////////////////////////////   BASIC INSTRUCTIONS START HERE ////////////////////////////////
 
         addBasicInstructions();
@@ -194,17 +195,22 @@ public class InstructionSet {
      * @return list of corresponding Instruction object(s), or null if not found.
      */
     public ArrayList<Instruction> matchOperator(String name) {
-        ArrayList<Instruction> matchingInstructions = null;
-        // Linear search for now....
-        for (Instruction inst : instructionList) {
-            if (inst.getName().equalsIgnoreCase(name)) {
-                if (matchingInstructions == null)
-                    matchingInstructions = new ArrayList<>();
-                matchingInstructions.add(inst);
+        // Every operand of every statement is looked up here, so the list is indexed by lower-case
+        // name instead of searched; the index is rebuilt whenever the list has changed size, which
+        // is what populate() and any caller adding to getInstructionList() do.
+        if (byName == null || indexedSize != instructionList.size()) {
+            byName = new HashMap<>();
+            for (Instruction inst : instructionList) {
+                byName.computeIfAbsent(inst.getName().toLowerCase(), key -> new ArrayList<>()).add(inst);
             }
+            indexedSize = instructionList.size();
         }
-        return matchingInstructions;
+        ArrayList<Instruction> matching = byName.get(name.toLowerCase());
+        return matching == null ? null : new ArrayList<>(matching);
     }
+
+    private HashMap<String, ArrayList<Instruction>> byName;
+    private int indexedSize = -1;
 
 
     // TODO: check to see if autocomplete was accidentally removed

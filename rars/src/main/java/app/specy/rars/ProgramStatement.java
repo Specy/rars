@@ -600,7 +600,21 @@ public class ProgramStatement implements Comparable<ProgramStatement> {
      * @return The Basic Assembly statement.
      **/
     public String getPrintableBasicAssemblyStatement() {
-        return basicStatementList.toString();
+        return basicStatementList == null ? (basicAssemblyStatement == null ? "" : basicAssemblyStatement) : basicStatementList.toString();
+    }
+
+    /** A text-image padding word with directive provenance and no executable instruction. */
+    public static ProgramStatement rawPadding(int binary, int address, RISCVprogram program, app.specy.rars.assembler.SourceLine source) {
+        ProgramStatement statement = new ProgramStatement(binary, address);
+        statement.instruction = null;
+        statement.sourceProgram = program;
+        statement.sourcePath = source.getSourcePath();
+        statement.sourceLine = source.getLineNumber();
+        statement.source = source.getSource();
+        statement.basicStatementList = null;
+        statement.basicAssemblyStatement = ".padding";
+        statement.machineStatement = String.format("%32s", Integer.toBinaryString(binary)).replace(' ', '0');
+        return statement;
     }
 
     /**

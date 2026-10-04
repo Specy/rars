@@ -21,6 +21,10 @@ public class MemoryFileSystem extends RISCVFileSystem {
         files.put(path, content);
     }
 
+    public boolean exists(String path) {
+        return files.containsKey(path);
+    }
+
     public void delete(String path) {
         files.remove(path);
     }

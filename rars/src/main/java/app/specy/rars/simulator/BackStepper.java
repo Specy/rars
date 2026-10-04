@@ -759,12 +759,11 @@ public class BackStepper {
     // simulation thread and the GUI thread for the back-step button); this fork is headless and
     // single threaded under TeaVM, and the stack is pushed twice per instruction, so the monitors
     // cost more than the operations they guard.
-    // Upon construction, it is filled with newly-created empty BackStep objects which
-    // will exist for the life of the stack.  Push does not create a BackStep object
-    // but instead overwrites the contents of the existing one.  Thus during RISCV
-    // program (simulated) execution, BackStep objects are never created or junked
-    // regardless of how many steps are executed.  This will speed things up a bit
-    // and make life easier for the garbage collector.
+    // A slot's BackStep object is created the first time the stack reaches it and then lives
+    // as long as the stack: push overwrites the contents of the existing one. Once the stack has
+    // wrapped, RISCV program (simulated) execution never creates or junks a BackStep, however
+    // many steps are executed. Creating them on first use instead of all at assembly lets the
+    // capacity be large enough for a library call without a short program paying for it.
 
     public class BackstepStack {
         private final int capacity;
@@ -772,18 +771,19 @@ public class BackStepper {
         private int top;
         private final BackStep[] stack;
 
-        // Stack is created upon successful assembly or reset.  The one-time overhead of
-        // creating all the BackStep objects will not be noticed by the user, and enhances
-        // runtime performance by not having to create or recycle them during
-        // program execution.
+        // Stack is created upon successful assembly or reset, with its slots empty.
         private BackstepStack(int capacity) {
             this.capacity = capacity;
             this.size = 0;
             this.top = -1;
             this.stack = new BackStep[capacity];
-            for (int i = 0; i < capacity; i++) {
-                this.stack[i] = new BackStep();
-            }
+        }
+
+        // The object in the slot the top has just moved onto, created the first time it is used.
+        private BackStep slot() {
+            BackStep step = stack[top];
+            if (step == null) stack[top] = step = new BackStep();
+            return step;
         }
 
         public BackStep[] getStack() {
@@ -797,6 +797,18 @@ public class BackStepper {
 
         private boolean empty() {
             return size == 0;
+        }
+
+        /** How many entries the stack holds. */
+        public int size() {
+            return size;
+        }
+
+        /** The entry {@code index} places below the top, without copying the stack; 0 is the top. */
+        public BackStep fromTop(int index) {
+            if (index < 0 || index >= size) throw new IndexOutOfBoundsException("No back step " + index);
+            int slot = top - index;
+            return stack[slot < 0 ? slot + capacity : slot];
         }
 
         // Moves the top onto the slot the next entry is written into, dropping the oldest entry
@@ -838,7 +850,7 @@ public class BackStepper {
             advance();
             // We'll re-use existing objects rather than create/discard each time.
             // Must use assign() method rather than series of assignment statements!
-            BackStep step = stack[top];
+            BackStep step = slot();
             step.assign(act, programCounter, parm1, parm2);
             step.param3Int = wroteInt;
             step.param3Long = wroteLong;
@@ -853,7 +865,7 @@ public class BackStepper {
         // has been closed, so it takes the ordinary slot an instruction's step would.
         private void pushPoke(int group, PokeRestore[] restores) {
             advance();
-            stack[top].assignPoke(group, restores);
+            slot().assignPoke(group, restores);
         }
 
         private void push(Action act, int programCounter, int parm1) {
