@@ -6,6 +6,7 @@ import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.JavaNumberText;
 
 
 
@@ -79,7 +80,7 @@ public class SyscallInputDialogFloat extends AbstractSyscall {
                 RegisterFile.updateRegister("a1", -3);
             } else {
 
-                float floatValue = Float.parseFloat(inputValue);
+                float floatValue = JavaNumberText.parseFloat(inputValue);
 
                 //System.out.println("SyscallInputDialogFloat: floatValue is " + floatValue);
 

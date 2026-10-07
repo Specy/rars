@@ -6,6 +6,7 @@ import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.util.Binary;
+import app.specy.rars.util.JavaNumberText;
 
 	/*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -194,7 +195,7 @@ public enum TokenTypes {
         if (('0' <= first && first <= '9') || (first == '.' && secondDigit)
                 || (first == '-' && (secondDigit || second == '.' || second == 'I' || second == 'N'))) {
             try {
-                Double.parseDouble(value);
+                JavaNumberText.parseDouble(value);
                 return TokenTypes.REAL_NUMBER;
             } catch (NumberFormatException e) {
                 // NO ACTION -- exception suppressed

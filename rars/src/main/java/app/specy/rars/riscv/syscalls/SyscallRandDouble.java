@@ -6,7 +6,6 @@ import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 
-import java.util.Random;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -50,12 +49,7 @@ public class SyscallRandDouble extends AbstractSyscall {
                 "a0 = index of pseudorandom number generator","fa0 = the next pseudorandom");
     }
     public void simulate(ProgramStatement statement) throws ExitingException {
-        Integer index = RegisterFile.getValue("a0");
-        Random stream = RandomStreams.randomStreams.get(index);
-        if (stream == null) {
-            stream = new Random(); // create a non-seeded stream
-            RandomStreams.randomStreams.put(index, stream);
-        }
-        FloatingPointRegisterFile.updateRegisterLong(10, Double.doubleToRawLongBits(stream.nextDouble()));
+        double value = RandomStreams.forDraw(RegisterFile.getValue("a0")).nextDouble();
+        FloatingPointRegisterFile.updateRegisterLong(10, Double.doubleToRawLongBits(value));
     }
 }

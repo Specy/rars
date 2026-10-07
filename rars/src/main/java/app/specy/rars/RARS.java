@@ -9,6 +9,8 @@ import app.specy.rars.riscv.fs.RISCVFileSystem;
 import app.specy.rars.riscv.fs.SourcePath;
 import app.specy.rars.riscv.hardware.*;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.riscv.syscalls.RandomStreams;
+import app.specy.rars.simulator.ProgramExit;
 import app.specy.rars.simulator.Simulator;
 import app.specy.rars.util.SystemIO;
 
@@ -24,6 +26,7 @@ public class RARS {
     private boolean assemblyAttempted;
     private boolean assembled;
     private static RISCVIO io;
+    /** Why the last run call stopped, or null when none has run since the program was initialized. */
     private Simulator.Reason stopReason = null;
 
 
@@ -141,6 +144,7 @@ public class RARS {
         main.prepareForAssembly(entryFile, files, assemblerProfile);
         main.setLinkInputs(runtimeLibrary, entrySymbol);
         ErrorList result = main.assemble(new java.util.ArrayList<>(List.of(main)), true);
+        Globals.memory.resetHeap(main.getHeapStart());
         Globals.program = main;
         assembled = true;
         return result;
@@ -148,6 +152,7 @@ public class RARS {
 
     public void initialize(boolean startAtMain) {
         requireAssembled();
+        main.getBackStepper().clearHistory();
         RegisterFile.resetRegisters();
         FloatingPointRegisterFile.resetRegisters();
         ControlAndStatusRegisterFile.resetRegisters();
@@ -155,7 +160,13 @@ public class RARS {
         ReservationTable.reset();
         if (entrySymbol != null) RegisterFile.initializeProgramCounter(entrySymbol);
         else RegisterFile.initializeProgramCounter(startAtMain);
-        Globals.exitCode = 0;
+        // A new run starts with an empty heap, where this program's heap starts.
+        Globals.memory.resetHeap(main.getHeapStart());
+        // The state of the run: a new one has not exited, and its random generators start afresh.
+        // Assembling leaves them alone, because a host assembles throwaway programs while one runs.
+        ProgramExit.reset();
+        RandomStreams.reset();
+        stopReason = null;
 
         // Copy in assembled code and arguments
         //simulation.copyFrom(assembled);
@@ -183,19 +194,36 @@ public class RARS {
     }
 
     public Simulator.Reason simulate(int[] breakpoints) throws SimulationException {
-        requireAssembled();
-        stopReason = this.main.simulate(-1, breakpoints);
-        return stopReason;
-    }
-    public Simulator.Reason simulate(int limit, int[] breakpoints) throws SimulationException {
-        requireAssembled();
-        stopReason = this.main.simulate(limit, breakpoints);
-        return stopReason;
+        return run(() -> this.main.simulate(-1, breakpoints));
     }
 
+    public Simulator.Reason simulate(int limit, int[] breakpoints) throws SimulationException {
+        return run(() -> this.main.simulate(limit, breakpoints));
+    }
+
+    /** Runs at most {@code limit} instructions, or until the program stops when it is 0 or less. */
     public Simulator.Reason simulate(int limit) throws SimulationException {
+        return run(() -> this.main.simulate(limit));
+    }
+
+    private interface Run {
+        Simulator.Reason run() throws SimulationException;
+    }
+
+    private Simulator.Reason run(Run body) throws SimulationException {
         requireAssembled();
-        stopReason = this.main.simulate(limit);
+        if (ProgramExit.hasExited()) {
+            // An exit ends the program: what follows the ecall is not run, as RARS does not
+            // resume a program that has finished. Undo or initialize starts it again.
+            stopReason = Simulator.Reason.NORMAL_TERMINATION;
+            return stopReason;
+        }
+        try {
+            stopReason = body.run();
+        } catch (SimulationException failure) {
+            stopReason = Simulator.Reason.EXCEPTION;
+            throw failure;
+        }
         return stopReason;
     }
 
@@ -208,13 +236,29 @@ public class RARS {
     }
 
     public Simulator.Reason step() throws SimulationException {
+        return run(() -> this.main.simulate(1));
+    }
+
+    /**
+     * Where the program's heap, and so the first block sbrk hands out, starts: RARS's heap base, or
+     * the first page after static data in a GNU-profile program whose static data reaches past it.
+     */
+    public int getHeapStart() {
         requireAssembled();
-        stopReason = this.main.simulate(1);
+        return main.getHeapStart();
+    }
+
+    /** Why the last run call stopped, or null when none has run since the program was initialized. */
+    public Simulator.Reason getStopReason() {
         return stopReason;
     }
 
-    public Simulator.Reason getStopReason() {
-        return stopReason;
+    /**
+     * The program's exit code: exit2's operand once it has run, 0 otherwise - after exit, after
+     * running off the end, while the program runs. Initialize resets it; undo puts it back.
+     */
+    public int getExitCode() {
+        return ProgramExit.code();
     }
 
     public RISCVprogram getProgram() {
@@ -238,8 +282,24 @@ public class RARS {
         return Globals.getInstructionSet();
     }
 
+    /**
+     * Whether the program has ended, read from its state rather than from the last run call, so
+     * that it is right after undo too: an exit service has run, or there is no statement at the
+     * program counter because execution ran off the end of the program.
+     */
     public boolean hasTerminated(){
-        return stopReason == Simulator.Reason.CLIFF_TERMINATION;
+        if (!assembled) return false;
+        return ProgramExit.hasExited() || Simulator.noStatementAt(RegisterFile.getProgramCounter());
+    }
+
+    /**
+     * The statement the program runs next, or null when it has ended: after an exit, the statement
+     * that follows the ecall is not one the program will run.
+     */
+    public ProgramStatement getNextStatement() {
+        requireAssembled();
+        if (hasTerminated()) return null;
+        return this.main.getMachineStatement(RegisterFile.getProgramCounter());
     }
 
     public Simulator getSimulator() {

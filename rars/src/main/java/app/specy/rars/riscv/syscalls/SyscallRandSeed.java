@@ -4,7 +4,6 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
 
-import java.util.Random;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -41,13 +40,9 @@ public class SyscallRandSeed extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) {
-        Integer index = RegisterFile.getValue("a0");
-        Random stream = RandomStreams.randomStreams.get(index);
-        if (stream == null) {
-            RandomStreams.randomStreams.put(index, new Random(RegisterFile.getValue("a1")));
-        } else {
-            stream.setSeed(RegisterFile.getValue("a1"));
-        }
+        // As new Random(seed) does for a generator that does not exist yet; the seed is the low
+        // word of a1, widened with its sign.
+        RandomStreams.setSeed(RegisterFile.getValue("a0"), RegisterFile.getValue("a1"));
     }
 }
 

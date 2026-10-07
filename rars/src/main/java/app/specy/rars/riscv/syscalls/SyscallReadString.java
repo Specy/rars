@@ -7,8 +7,8 @@ import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.util.SystemIO;
+import app.specy.rars.util.Utf8;
 
-import java.nio.charset.StandardCharsets;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -65,8 +65,9 @@ public class SyscallReadString extends AbstractSyscall {
         }
         inputString = SystemIO.readString(this.getNumber(), maxLength);
 
-        byte[] utf8BytesList = inputString.getBytes(StandardCharsets.UTF_8);
-        // TODO: allow for utf-8 encoded strings
+        // UTF-8, as Java encodes it: at most maxLength characters were taken, and at most
+        // maxLength of their bytes are stored, so a character can be cut where the buffer ends.
+        byte[] utf8BytesList = Utf8.encode(inputString);
         int stringLength = Math.min(maxLength, utf8BytesList.length);
         try {
             for (int index = 0; index < stringLength; index++) {

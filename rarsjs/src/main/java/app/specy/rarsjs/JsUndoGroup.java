@@ -17,15 +17,15 @@ public final class JsUndoGroup {
     private JsUndoGroup() {
     }
 
-    static JSObject instruction(int pc, JSArray<JSObject> steps) {
-        return create("instruction", pc, steps, JSArray.<JSObject>create(0));
+    static JSObject instruction(String serial, int pc, JSArray<JSObject> steps) {
+        return create("instruction", serial, pc, steps, JSArray.<JSObject>create(0));
     }
 
-    static JSObject poke(int pc, JSArray<JSObject> steps, JSArray<JSObject> writes) {
-        return create("poke", pc, steps, writes);
+    static JSObject poke(String serial, int pc, JSArray<JSObject> steps, JSArray<JSObject> writes) {
+        return create("poke", serial, pc, steps, writes);
     }
 
-    @JSBody(params = { "kind", "pc", "steps", "writes" },
-            script = "return { kind: kind, pc: pc, steps: steps, writes: writes };")
-    private static native JSObject create(String kind, int pc, JSObject steps, JSObject writes);
+    @JSBody(params = { "kind", "serial", "pc", "steps", "writes" },
+            script = "return { kind: kind, serial: serial, pc: pc, steps: steps, writes: writes };")
+    private static native JSObject create(String kind, String serial, int pc, JSObject steps, JSObject writes);
 }

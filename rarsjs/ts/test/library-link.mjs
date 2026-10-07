@@ -119,7 +119,10 @@ for (const width of [32, 64]) {
     }
     riscv = assemble('.text\n.globl main\nmain:\ncsrr t0,time\nfcvt.w.s t1,ft0,rtz\ncall time\nlui a1,%hi(cycle)\nlw a1,%lo(cycle)(a1)\nadd a0,a0,a1\nlla a1,ref\nlw a1,0(a1)\nlw a1,0(a1)\nadd a0,a0,a1\nli a7,93\necall\n.data\nref: .word rtz\n', { ...gnu, libraries: [named] })
     assert.deepEqual([...sourcesOf(riscv)].sort(), ['@runtime/v1/time.s', 'main.s'])
+    // The CSR reads the program time, from the time handler as the time service (30) does.
+    riscv.registerHandler('time', () => 1234)
     assert.equal(await run(riscv), 18n)
+    assert.equal(BigInt(riscv.getRegistersValuesLong()[5]), 1234n, 'csrr read the time CSR')
     assert.deepEqual(RISCV.analyzeGnuUnit('u.s', '.text\ncsrr a0,cycle\nfcvt.w.s a0,fa0,rtz\ncall time\n.data\n.word rtz\n').references, ['time', 'rtz'])
     // Numbers and numeric labels are not references; a C++ inline variable's type is accepted.
     assert.deepEqual(
@@ -131,8 +134,8 @@ for (const width of [32, 64]) {
     riscv = assemble('.data\nbuf: .space 8\n.text\nmain:\nli a0,0\nla a1,buf\nli a2,8\nli a7,63\necall\nmv s0,a0\nli a0,0\nla a1,buf\nli a2,8\nli a7,63\necall\nmv s1,a0\nli a7,10\necall\n')
     const answers = [[3, [104, 105, 10]], [0, []]]
     riscv.initialize(true)
-    riscv.registerHandler('stdIn', async (_buffer, length) => {
-        assert.equal(length, 8)
+    riscv.registerHandler('stdIn', async (...args) => {
+        assert.deepEqual(args, [8])
         return answers.shift()
     })
     let reason

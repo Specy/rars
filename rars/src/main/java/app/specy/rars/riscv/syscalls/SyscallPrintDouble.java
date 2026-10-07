@@ -4,6 +4,7 @@ import app.specy.rars.ExitingException;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.util.JavaNumberText;
 import app.specy.rars.util.SystemIO;
 
 /*
@@ -48,6 +49,6 @@ public class SyscallPrintDouble extends AbstractSyscall {
      */
     public void simulate(ProgramStatement statement) throws ExitingException {
         // Note: Higher numbered reg contains high order word so concat 13-12.
-        SystemIO.printString(Double.toString(Double.longBitsToDouble(FloatingPointRegisterFile.getValueLong(10))));
+        SystemIO.printString(JavaNumberText.toString(Double.longBitsToDouble(FloatingPointRegisterFile.getValueLong(10))));
     }
 }

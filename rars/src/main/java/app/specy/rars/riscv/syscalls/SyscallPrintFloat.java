@@ -3,6 +3,7 @@ package app.specy.rars.riscv.syscalls;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.util.JavaNumberText;
 import app.specy.rars.util.SystemIO;
 
 /*
@@ -39,7 +40,7 @@ public class SyscallPrintFloat extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) {
-        SystemIO.printString(Float.toString(Float.intBitsToFloat(
+        SystemIO.printString(JavaNumberText.toString(Float.intBitsToFloat(
                 FloatingPointRegisterFile.getValue("fa0"))));
     }
 }

@@ -2,6 +2,7 @@ package app.specy.rars.riscv.hardware;
 
 import app.specy.rars.Globals;
 import app.specy.rars.riscv.Instruction;
+import app.specy.rars.util.SystemIO;
 
 import java.util.Observer;
 
@@ -134,6 +135,8 @@ public class ControlAndStatusRegisterFile {
     /** Names of the two counters the simulator advances on every instruction. */
     public static final String CYCLE = "cycle";
     public static final String INSTRET = "instret";
+    /** The numbers of the time counter and of timeh, its upper half on RV32. */
+    private static final int TIME = 0xC01, TIMEH = 0xC81;
 
     public static void updateRegisterBackdoor(int num, long val) {
         settleCounters();
@@ -162,9 +165,8 @@ public class ControlAndStatusRegisterFile {
         settleCounters();
         long old = register.setValueBackdoor(val);
         // Writing a register the value it already holds is not a change, and its undo entry would
-        // restore that same value, so none is recorded. The time counter reports milliseconds and
-        // is written every instruction, so nearly all of its writes are such no-ops; recording them
-        // spent the whole undo history on entries that undo nothing.
+        // restore that same value, so none is recorded: the time counter reports milliseconds, and
+        // a program that reads it in a loop mostly reads the same one.
         if (old == val) return;
         if ((Globals.getSettings().getBackSteppingEnabled())) {
             // `val` is what the register now holds: setValueBackdoor stores it verbatim, whatever
@@ -262,6 +264,24 @@ public class ControlAndStatusRegisterFile {
     public static int getValue(int num) {
         settleCounters();
         return (int)instance.getValue(num);
+    }
+
+    /**
+     * The value a CSR instruction reads from register {@code num}. Reading the time counter, or
+     * timeh, its upper half on RV32, first sets it to the program time in milliseconds, which is
+     * what the time service (30) reads: RARS writes the host clock into it after every
+     * instruction, and reading the IO environment's clock instead gives a scripted run its virtual
+     * clock here too. The write belongs to the reading instruction, so undoing it restores the
+     * counter.
+     *
+     * @param num The register number.
+     * @return The value of the given register.
+     **/
+    public static long getValueForInstruction(int num) {
+        if (num == TIME || num == TIMEH) {
+            updateRegisterBackdoor(TIME, (long) SystemIO.time());
+        }
+        return getValueLong(num);
     }
 
     /**

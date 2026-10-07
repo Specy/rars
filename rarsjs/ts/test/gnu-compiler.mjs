@@ -253,5 +253,57 @@ for (const width of [32, 64]) {
         for (const [index, number] of saved.entries()) assert.equal(register(core, number), BigInt(100+index), `${filename}: s register ${number}`)
         assert.ok(core.getCompiledStatements().some(s => s.sourcePath === 'main.s'))
     }
-    console.log(`ok - GNU compiler v1 RV${width}: reference bytes, data, relocations, profiles, diagnostics, execution and undo`)
+
+    // The heap follows static data: once a GNU-profile program's .data, .rodata, .bss and common
+    // symbols reach past RARS's heap base (0x10040000), sbrk's first block is the first 4 KiB page
+    // after them, as ld and a kernel place the break. A 512 KiB .bss array and a common block, in
+    // GCC's shapes, end at 0x10091008 here, so the heap starts at 0x10092000.
+    {
+        const HEAP_BASE = 0x10040000
+        const program = [
+            '.text', '.globl main', 'main:',
+            'li a0,16', 'li a7,9', 'ecall', 'mv s0,a0',
+            'li a0,8', 'li a7,9', 'ecall', 'mv s1,a0',
+            'lla t0,big', 'li t1,524284', 'add t0,t0,t1', 'li t2,7', 'sw t2,0(t0)',
+            'lla t1,more', 'li t2,4088', 'add t1,t1,t2', 'li t3,11', 'sw t3,0(t1)',
+            'li t3,9', 'sw t3,0(s0)', 'sw t3,12(s0)',
+            'lw a1,0(t0)', 'lw a2,0(t1)', 'lw a3,0(s0)', 'add a0,a1,a2', 'add a0,a0,a3',
+            'li a7,93', 'ecall',
+            '.data', '.align 2', 'first: .word 1',
+            '.bss', '.align 2', '.type big, @object', '.size big, 524288', 'big: .zero 524288',
+            '.local more', '.comm more,4096,8',
+        ].join('\n')
+        const heap = assemble(program)
+        assert.equal(heap.getAddressOfLabel('big'), 0x10010004)
+        assert.equal(heap.getAddressOfLabel('more'), 0x10010008 + 524288)
+        assert.equal(heap.getHeapStart(), 0x10092000, 'the first page after static data')
+        for (let runs = 0; runs < 2; runs++) {
+            await execute(heap, 27)
+            assert.equal(register(heap, 8), 0x10092000n, 'sbrk hands out the heap start first')
+            assert.equal(register(heap, 9), 0x10092010n, 'and the next block after it')
+            assert.equal(heap.exitCode, 27, 'the array, the common block and the heap hold their own values')
+        }
+        // The largest static data the data segment holds, which leaves the heap empty.
+        assert.equal(assemble('.bss\nbig: .zero 4128768\n').getHeapStart(), 0x10400000)
+        reject('.bss\nbig: .zero 4128769\n',
+            /^Static data ends at 0x10400001, past the end of the data segment at 0x10400000: \.data, \.rodata, \.bss and common symbols together fit in 4128768 bytes from 0x10010000$/m)
+        reject('.data\n.word 1\n.bss\n.comm huge,4194304,4\n', /Static data ends at 0x10410004, past the end of the data segment/)
+        // Static data below the heap base leaves the heap where RARS has it.
+        assert.equal(assemble('.bss\nbig: .zero 196608\n').getHeapStart(), HEAP_BASE)
+        assert.equal(assemble('.bss\nbig: .zero 196609\n').getHeapStart(), 0x10041000)
+
+        // A RARS-dialect program keeps RARS's layout whatever its size: the heap starts at its base,
+        // inside the program's data.
+        const legacy = assemble('.data\nbig: .space 524288\n.text\nmain: li a0,16\nli a7,9\necall\nmv s0,a0\nli a7,10\necall\n', {}, {})
+        assert.equal(legacy.getHeapStart(), HEAP_BASE)
+        legacy.initialize(true)
+        while (!legacy.terminated) await legacy.step()
+        assert.equal(register(legacy, 8), BigInt(HEAP_BASE))
+        // And library members linked after it still stop before RARS's heap base.
+        const member = { members: { 'lib/table.s': '.data\n.globl table\ntable: .word 1\n' }, index: { table: 'lib/table.s' } }
+        const crossing = coreFor('.data\nbig: .space 196608\n.text\nmain: la t0,table\nli a7,10\necall\n', {}, { libraries: [member] }).assemble()
+        assert.equal(crossing.hasErrors, true)
+        assert.match(crossing.errors.map(e => e.message).join('\n'), /Static data reaches the heap at 0x10040000/)
+    }
+    console.log(`ok - GNU compiler v1 RV${width}: reference bytes, data, relocations, profiles, diagnostics, execution, undo and the heap after static data`)
 }

@@ -21,6 +21,10 @@ First, create an instance of the simulator with `makeRiscVFromFiles`. Supply a v
 
 Before running the simulator, you must assemble and initialize it. You can then step through the program, simulate with breakpoints, or simulate with a limit.
 
+Floating point literals are read as Java 21 reads them, correctly rounded: `.double` stores
+`Double.parseDouble` of its token and `.float` that double rounded to a float, as RARS does, while
+the `gnu-compiler-v1` profile reads `.float` straight to single precision, as GNU as does.
+
 ⚠️**WARNING**⚠️ You must have only one instance of the simulator at a time. Memory, registers, and other state may be shared or behave unpredictably with multiple instances.
 
 ```typescript
@@ -63,15 +67,15 @@ console.log(`t2: ${t2}`);
 const data = riscvSimulator.readMemoryBytes(0xffff0000, 4); // Read 4 bytes from address 0xffff0000
 riscvSimulator.setMemoryBytes(0xffff0000, [0x01, 0x02, 0x03, 0x04]); // Write 4 bytes to address 0xffff0000
 
-// Registering Handlers (for syscalls and other events):
-riscvSimulator.registerHandler("printInt", (value: number) => {
-  console.log("printInt syscall called with:", value);
+// Registering Handlers (for syscalls and other events): every print syscall writes its text here.
+riscvSimulator.registerHandler("printString", (text: string) => {
+  process.stdout.write(text);
 });
 
 // Handlers may also be async: returning a promise suspends the simulation until it settles,
 // so IO can be backed by an async API without blocking the event loop.
 riscvSimulator.registerHandler("readInt", async () => {
-  return await promptUserForANumber();
+  return await promptUserForALine(); // the syscall parses the line itself
 });
 
 // Accessing the undo stack:
@@ -104,7 +108,7 @@ Every syscall that needs to talk to the outside world goes through a handler you
 handler can return its result directly, or return a promise of it:
 
 ```typescript
-riscvSimulator.registerHandler("readInt", () => 42);                  // synchronous
+riscvSimulator.registerHandler("readInt", () => "42");                // synchronous
 riscvSimulator.registerHandler("readString", () => fetchLine());      // asynchronous
 ```
 
@@ -114,12 +118,172 @@ promise settles, so nothing has to be shoehorned into a synchronous API. Because
 `simulateWithBreakpointsAndLimit` all return a promise. Everything else on `JsRiscV` (registers,
 memory, statements, the undo stack) stays synchronous.
 
-If a handler's promise rejects, the pending `step`/`simulate*` call rejects as well, with the
-rejection reason in the message.
+If a handler throws, its promise rejects or it answers what its type does not allow, the pending
+`step`/`simulate*` call rejects with a `RuntimeError` of kind `handler`, whose `cause` is what the
+handler threw or rejected with (see [Running and stopping](#running-and-stopping)).
 
 Synchronous handlers never yield to the event loop: the simulation runs straight through, and the
 returned promise settles on a microtask. Overlapping calls are queued and run one after another,
 never concurrently.
+
+The syscalls behave as RARS 1.6 does on Java 21, so handlers only move text and bytes:
+
+* Every print syscall formats its value and writes the text through `printString`. Print float
+  and print double write what `Float.toString` and `Double.toString` write: `1.0`, `0.001`,
+  `1.0E-4`, `1.0E7`, `-0.0`, `NaN`, `Infinity`.
+* `readInt`, `readFloat` and `readDouble` answer with the line typed. The syscall trims it and
+  parses it as `Integer.parseInt`, `Float.parseFloat` and `Double.parseDouble` do, hexadecimal
+  floats and an `f` or `d` suffix included, and stops the program on anything else:
+  `Runtime exception at 0x00400004: invalid integer input (syscall 5)`.
+* `readChar` answers with the character typed, Enter as `"\n"`. The syscall takes the first
+  UTF-16 unit, and an empty answer stops the program with `invalid char input (syscall 12)`.
+* `inputDialog` answers `null` when the user cancels, which dialogs 51 to 54 report to the
+  program as status -2; `confirm` answers 2 for Cancel. The program waits for `outputDialog` to
+  settle.
+* Bytes cross as plain arrays of numbers from 0 to 255. `writeFile` answers with the number of
+  bytes written, or -1, and the program receives that count; `readFile` and `stdIn` answer
+  `[count, bytes]`, with a count of 0 at the end of the input and -1 for a failed read.
+
+```typescript
+riscvSimulator.registerHandler("inputDialog", (message) => window.prompt(message)); // null on Cancel
+riscvSimulator.registerHandler("writeFile", (descriptor, bytes) => files.write(descriptor, Uint8Array.from(bytes)));
+riscvSimulator.registerHandler("stdIn", async (length) => {
+  const bytes = await terminal.readBytes(length);
+  return [bytes.length, Array.from(bytes)];
+});
+```
+
+| Handler | Syscalls | Receives | Answers |
+| --- | --- | --- | --- |
+| `printString` | 1 to 4, 11, 34 to 36 | the text to print | nothing |
+| `readInt`, `readFloat`, `readDouble`, `readString` | 5 to 8 | nothing | the line typed |
+| `readChar` | 12 | nothing | the character typed |
+| `openFile` | 1024 | path, flags, whether to append | the file descriptor, or -1 |
+| `readFile` | 63 | file descriptor, most bytes to read | `[count, bytes]` |
+| `writeFile` | 64 | file descriptor, bytes | bytes written, or -1 |
+| `closeFile` | 57 | file descriptor | nothing |
+| `seekFile` | 62 | file descriptor, offset, whence | the new position, or -1 |
+| `stdIn` | 63 on descriptor 0 | most bytes to read | `[count, bytes]` |
+| `stdOut`, `stdErr` | 64 on descriptors 1 and 2 | bytes | nothing |
+| `confirm` | 50 | message | `ConfirmResult` |
+| `inputDialog` | 51 to 54 | message | the text entered, or `null` |
+| `outputDialog` | 55, 56, 58 to 60 | message, `DialogType` | nothing |
+| `sleep` | 32 | milliseconds | nothing |
+| `time` | 30, and an instruction reading the `time` CSR | nothing | milliseconds |
+| `randomSeed` (optional) | 41 to 44, a generator's first use | the generator's number | a seed from 0 to 2^48 - 1 |
+
+## Text
+
+Text is UTF-8 throughout, as in RARS, so a string's text is the same in a literal, through print
+string (4) and through write (64), and the same as the UTF-8 a C compiler emits:
+
+* `.ascii`, `.asciz` and `.string` store a literal by code point, `\u` escapes included: four
+  hexadecimal digits naming one UTF-16 unit, and two units that make a surrogate pair name one
+  character. RARS encodes a literal one UTF-16 unit at a time, which stores a character outside the
+  Basic Multilingual Plane as `??`; here `"😀"` and `"\ud83d\ude00"` both store its four bytes.
+* Print string (4), the path of open (1024) and the messages of the dialogs (50 to 60) are read
+  as UTF-8, the way Java 21 decodes it: a malformed sequence prints as U+FFFD. Message dialog double
+  (58), which RARS reads one byte per character, reads UTF-8 like the others.
+* Read string (8) and input dialog string (54) store the text as UTF-8, measuring the buffer in
+  bytes: a buffer of n bytes holds at most n - 1 bytes of text, so a character can be
+  cut where the buffer ends. An unpaired surrogate is stored as `?`, as Java encodes it.
+* Print char (11) prints the character numbered by the low byte of `a0`, and read char (12)
+  answers the first UTF-16 unit typed: 233 for `é`, 8364 for `€` and 0xd83d, a high surrogate,
+  for `😀`.
+
+## Corrections to RARS
+
+* GetCWD (17) writes `/`, the root that relative and absolute file paths both resolve against.
+  RARS writes the JVM's working directory, which a browser does not have.
+* Input dialog double (53) reads its message from `a0`, as every dialog does; RARS reads `x4`.
+* The `time` CSR, and `timeh`, its upper half on RV32, read the program time in milliseconds
+  from the `time` handler when an instruction reads them, as the time service (30) does, so a
+  scripted run's virtual clock reaches them. RARS writes the host clock into the counter after
+  every instruction. The counter reads 0 until the program reads it, and Undo puts back the reading
+  before. `cycle` and `instret` count instructions as in RARS.
+
+## Random numbers
+
+The random services draw from `java.util.Random`, implemented exactly, so a program that seeds a
+generator with ecall 40 prints the numbers RARS prints: `nextInt` (41), `nextInt(bound)` with
+Java's rejection of over-represented values (42), `nextFloat` (43) and `nextDouble` (44). Each
+number in `a0` names a generator of its own.
+
+A generator the program has not seeded starts, on its first use, from the seed the optional
+`randomSeed` handler answers: a whole number from 0 to 2^48 - 1, as `new Random(seed)` takes it.
+Without the handler it starts from host randomness, as in RARS; a scripted run answers with a fixed
+seed instead and gets the same numbers every time. Handlers are shared by every `JsRiscV` instance,
+and registering `undefined` removes one.
+
+```typescript
+riscvSimulator.registerHandler("randomSeed", () => 42);      // the same numbers on every run
+riscvSimulator.registerHandler("randomSeed", undefined);     // host randomness again
+```
+
+The generators belong to the run: `initialize` forgets them, so each starts from a new seed. Undo
+puts a generator back as it was before the service ran, so Undo then Step draws the same number.
+
+## Running and stopping
+
+Every run call (`step`, `simulate`, `simulateWithLimit`, `simulateWithBreakpoints`,
+`simulateWithBreakpointsAndLimit`) resolves to a `StopReason`, the same enum `@specy/mips` exports:
+
+| `StopReason` | When |
+| --- | --- |
+| `MAX_STEPS` | the instruction limit was reached; a `step` ends on it |
+| `BREAKPOINT` | the program counter reached a breakpoint address, whose instruction has not run, or an `ebreak` ran |
+| `NORMAL_TERMINATION` | exit (10) or exit2 (93) ran |
+| `CLIFF_TERMINATION` | the program ran off the end of its code; the call that runs the last instruction says so |
+
+`terminated` is read from the program's state, so it is right after `undo()` too: it is true once
+an exit has run or there is no statement at the program counter, and `getNextStatement()` then
+returns `null`. A program that has exited runs nothing more: every run call resolves to
+`NORMAL_TERMINATION` again until `undo()` or `initialize()`. `exitCode` is exit2's `a0` once it has
+run and 0 otherwise, after exit and after running off the end too; `initialize` resets it and
+undoing the exit puts back the code before it. `getStopReason()` reports the last run call's
+reason, `NONE` after `initialize`.
+
+A runtime failure rejects the run call with a `RuntimeError`, an `Error` with typed fields:
+
+```typescript
+try {
+    await riscvSimulator.simulate();
+} catch (error) {
+    if (isRuntimeError(error)) {
+        // error.kind: 'exception' | 'syscall' | 'handler' | 'internal'
+        // error.address, error.sourcePath, error.line (one-based, null without a statement)
+        console.log(`${error.sourcePath}:${error.line}: ${error.message}`);
+        // main.asm:7: Runtime exception at 0x00400018: invalid or unimplemented syscall service: 99
+    }
+}
+```
+
+`exception` is a RISC-V exception the program had no trap handler for (a misaligned or faulting
+access, an illegal instruction, an instruction fetch outside the program), `syscall` a service that
+refused its number, arguments or input, `handler` a host handler or memory observer that threw,
+rejected or broke its contract (its `cause` is what it threw), and `internal` the simulator
+failing. The message is RARS's own. A failure leaves `terminated` false and `getStopReason()` at
+`EXCEPTION`; any other rejection, such as a run call on a program that did not assemble, is the
+plain error it is.
+
+## Memory layout
+
+Programs run in RARS's memory layout: text from 0x00400000, static data from 0x10010000, the heap
+from 0x10040000, the stack down from 0x7fffeffc and memory-mapped IO from 0xffff0000. The data
+segment, which static data and the heap share, ends at 0x10400000.
+
+* A RARS-dialect program keeps this layout whatever its size, as in RARS: data past
+  0x10040000 shares its addresses with the heap.
+* A `gnu-compiler-v1` program's heap follows its static data (`.data`, `.rodata`, `.bss` and
+  common symbols): once they reach past 0x10040000, the heap starts at the first 4 KiB page after
+  them, where ld and a kernel put the break, and sbrk (9) hands out that address first. Static data
+  must fit in the data segment, 4,128,768 bytes from 0x10010000; a program with more fails to
+  assemble with `Static data ends at 0x10410000, past the end of the data segment at 0x10400000: ...`.
+* Library members linked after a RARS-dialect program must end below 0x10040000, or the program
+  fails to assemble with `Static data reaches the heap at 0x10040000`.
+
+`getHeapStart()` reports where the heap starts, and `initialize` empties it again. An allocator
+built on sbrk follows the heap wherever it starts.
 
 ## API
 
@@ -145,13 +309,18 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `canUndo: boolean` (Read-only): True if an undo operation can be performed.
 * `programCounter: number` (Read-only): The current value of the program counter (PC).
 * `stackPointer: number` (Read-only): The current value of the stack pointer (`$sp`).
-* `terminated: boolean` (Read-only): True if the simulation has terminated (e.g., via an exit syscall or error).
+* `terminated: boolean` (Read-only): Whether the program has ended, by an exit or by running off the end, read from its state so that it is right after `undo()`.
+* `exitCode: number` (Read-only): exit2's code once it has run, 0 otherwise.
 
 #### Methods
 
 * `assemble(): RISCVAssembleResult`: Assembles the program. Returns an object containing a report, error list, and an `hasErrors` flag.
 * `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction.
-* `step(): Promise<StopReason>`: Executes a single instruction. Resolves to the reason the simulation stopped.
+* `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
+* `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
+* `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the
+  first page after static data in a `gnu-compiler-v1` program whose static data reaches past it.
+  See [Memory layout](#memory-layout).
 * `undo(): void`: Undoes the last instruction executed, if `canUndo` is true and undo is enabled.
 * `setUndoEnabled(enabled: boolean): void`: Enables or disables the undo feature.
 * `setUndoSize(size: number): void`: Sets the maximum number of steps kept in the undo history. Must be called before assembling.
@@ -166,7 +335,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
 * `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values.
 * `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`.
-* `getNextStatement(): JsProgramStatement | null`: Returns the next `JsProgramStatement` to be executed, or `null` if at the end.
+* `getNextStatement(): JsProgramStatement | null`: Returns the next `JsProgramStatement` to be executed, or `null` once the program has terminated.
 * `getStatementAtAddress(address: number): JsProgramStatement | null`: Gets the program statement at the given memory `address`.
 * `getStatementsAtSourceLocation(sourcePath: string, sourceLine: number): JsProgramStatement[]`: Returns every machine statement generated from an original one-based source location, in address order. Pseudo-instructions and macro calls can produce multiple results.
 * `getCompiledStatements(): JsProgramStatement[]`: Returns all machine statements after a successful assembly.
@@ -186,6 +355,8 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `RISCVSourceSet`: A read-only mapping from canonical virtual source paths to source strings.
 * `RISCVSourceLocation`: A source path and one-based source line.
 * `HandlerName`: Union type of all possible handler names (keys of `HandlerMap`).
+* `StopReason`: Enum of the reasons a run call stops.
+* `RuntimeError`: The typed error a run call rejects with when the program fails; `isRuntimeError(error)` tells it apart.
 * `HandlerMap`: An object type mapping `HandlerName`s to their expected input argument types (`in`) and return type (`out`). This defines the signature for syscall/event handlers.
 * `HandlerMapFns`: An object type where keys are `HandlerName`s and values are the corresponding handler functions.
 * `DialogType`: Enum for message dialog types (`ERROR_MESSAGE`, `INFORMATION_MESSAGE`, `WARNING_MESSAGE`, `QUESTION_MESSAGE`).

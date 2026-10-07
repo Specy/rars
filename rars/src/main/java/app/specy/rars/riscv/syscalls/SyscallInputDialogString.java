@@ -7,8 +7,8 @@ import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.Utf8;
 
-import java.nio.charset.StandardCharsets;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -86,7 +86,7 @@ public class SyscallInputDialogString extends AbstractSyscall {
             {
                 RegisterFile.updateRegister("a1", -3);
             } else {
-                byte[] utf8BytesList = inputString.getBytes(StandardCharsets.UTF_8);
+                byte[] utf8BytesList = Utf8.encode(inputString);
                 // The buffer will contain characters, a '\n' character, and the null character
                 // Copy the input data to buffer as space permits
                 int stringLength = Math.min(maxLength-1, utf8BytesList.length);

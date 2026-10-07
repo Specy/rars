@@ -5,6 +5,7 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.JavaNumberText;
 
 
 
@@ -50,7 +51,7 @@ public class SyscallMessageDialogFloat extends AbstractSyscall {
     public void simulate(ProgramStatement statement) throws ExitingException {
         String message = NullString.get(statement);
 
-        this.io.outputDialog(message + Float.toString(FloatingPointRegisterFile.getFloatFromRegister("fa1")), 1);
+        this.io.outputDialog(message + JavaNumberText.toString(FloatingPointRegisterFile.getFloatFromRegister("fa1")), 1);
 
     }
 }

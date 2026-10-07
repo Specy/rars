@@ -1,9 +1,28 @@
 package app.specy.rars.riscv.io;
 
+import app.specy.rars.util.JavaRandom;
+
+/**
+ * Everything a program reaches outside the simulator through its syscalls. The syscalls own each
+ * service's semantics, as RARS defines them: they format what they print and parse what they
+ * read, so an implementation only moves text and bytes.
+ */
 public abstract class RISCVIO {
     public abstract int openFile(String filename, int flags, boolean append) throws RISCVIOError;
     public abstract void closeFile(int fileDescriptor) throws RISCVIOError;
-    public abstract void writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError;
+
+    /**
+     * Writes {@code buffer} to an open file.
+     *
+     * @return the number of bytes written, or -1 when the write failed
+     */
+    public abstract int writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError;
+
+    /**
+     * Reads at most {@code length} bytes of an open file into {@code destination}.
+     *
+     * @return the number of bytes read, 0 at the end of the file, or -1 when the read failed
+     */
     public abstract int readFile(int fileDescriptor, byte[] destination, int length) throws RISCVIOError;
 
 
@@ -12,6 +31,11 @@ public abstract class RISCVIO {
     // 2 ---> meaning Cancel
     public abstract int confirm(String message);
 
+    /**
+     * Asks for a line of text in a dialog.
+     *
+     * @return the text entered, or null when the dialog was cancelled
+     */
     public abstract String inputDialog(String message);
 
     /*
@@ -22,37 +46,22 @@ public abstract class RISCVIO {
      */
     public abstract void outputDialog(String message, int type);
 
-    public abstract double askDouble(String message);
+    /** The line typed for read int (syscall 5), which the syscall trims and parses. */
+    public abstract String readInt();
 
-    public abstract float askFloat(String message);
+    /** The line typed for read float (syscall 6), which the syscall trims and parses. */
+    public abstract String readFloat();
 
-    public abstract int askInt(String message);
+    /** The line typed for read double (syscall 7), which the syscall trims and parses. */
+    public abstract String readDouble();
 
-    public abstract String askString(String message);
+    public abstract String readString();
 
-    public abstract double readDouble();
+    /** What was typed for read char (syscall 12), whose first character the syscall takes. */
+    public abstract String readChar();
 
-    public abstract float readFloat();
-
-    public abstract int readInt();
-
-    public abstract String readString();    
-
-    public abstract char readChar();
-
-    public abstract void logLine(String message);
-
-    public abstract void log(String message);
-
-    public abstract void printChar(char c);
-
-    public abstract void printDouble(double d);
-
-    public abstract void printFloat(float f);
-
-    public abstract void printInt(int i);
-
-    public abstract void printString(String l);
+    /** Program output: every print syscall formats its value and writes the text here. */
+    public abstract void printString(String text);
 
 
     public abstract void sleep(int milliseconds);
@@ -83,6 +92,22 @@ public abstract class RISCVIO {
     public abstract void stdOut(byte[] buffer);
 
     public abstract void stdErr(byte[] buffer);
+
+    /**
+     * The seed a random generator starts from the first time a random service (41 to 44) uses it,
+     * unless the program seeded it with service 40: a whole number from 0 to 2^48 - 1, as
+     * {@code new java.util.Random(seed)} takes it. RARS starts such a generator from the host's
+     * randomness, which this does; an environment that wants the same numbers on every run, a
+     * scripted one, answers with a fixed seed instead.
+     *
+     * @param index the generator's number, as the program gave it in a0
+     */
+    public double randomSeed(int index) {
+        return hostRandomSeed();
+    }
+
+    /** A seed from the host's randomness, what RARS's unseeded {@code new Random()} comes to. */
+    public static double hostRandomSeed() {
+        return Math.floor(Math.random() * JavaRandom.SEED_LIMIT);
+    }
 }
-
-

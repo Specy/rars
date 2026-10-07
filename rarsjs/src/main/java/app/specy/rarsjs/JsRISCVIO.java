@@ -2,10 +2,12 @@ package app.specy.rarsjs;
 
 import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.io.RISCVIOError;
+import app.specy.rars.util.JavaRandom;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSExport;
-import org.teavm.jso.JSObject;
 import org.teavm.jso.JSProperty;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.core.*;
 
 import java.util.HashMap;
@@ -21,16 +23,34 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     public void registerHandler(String name, JSFunction handler) {
-        handlers.put(name, handler);
+        // An omitted handler arrives as undefined, which a Java null check would let through.
+        if (isNullish(handler)) {
+            handlers.remove(name);
+        } else {
+            handlers.put(name, handler);
+        }
     }
 
     private JSObject callHandler(String name, JSObject... args) {
         return awaitIfThenable(name, invokeHandler(name, args));
     }
 
+    /**
+     * Calls a handler. Whatever it throws ends the run as the host's failure, with what it threw as
+     * the cause.
+     */
     private JSObject invokeHandler(String name, JSObject... args) {
         JSFunction handler = handlers.get(name);
-        if (handler == null) throw new IllegalArgumentException("No handler registered for " + name);
+        if (handler == null) throw new JsHandlerFailure("No handler registered for " + name, null);
+        try {
+            return callWith(handler, args);
+        } catch (Throwable thrown) {
+            JSObject reason = JSExceptions.getJSException(thrown);
+            throw new JsHandlerFailure("Handler " + name + " threw: " + describe(reason), reason);
+        }
+    }
+
+    private static JSObject callWith(JSFunction handler, JSObject... args) {
         if(args.length == 0) return (JSObject) handler.call(handler);
         if(args.length == 1) return (JSObject) handler.call(handler, args[0]);
         if(args.length == 2) return (JSObject) handler.call(handler, args[0], args[1]);
@@ -56,7 +76,7 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     private static RISCVIOError rejected(String name, JSObject error) {
-        return new RISCVIOError("Handler " + name + " rejected: " + describe(error));
+        return new JsHandlerRejection("Handler " + name + " rejected: " + describe(error), error);
     }
 
     @JSBody(params = "value", script = "return value !== null && value !== void 0 && typeof value.then === 'function';")
@@ -90,7 +110,7 @@ public class JsRISCVIO extends RISCVIO {
         if (result instanceof JSNumber) {
             return ((JSNumber) result).intValue();
         }
-        throw new IllegalArgumentException("Handler " + name + " did not return an integer");
+        throw new JsHandlerFailure("Handler " + name + " did not return an integer", null);
     }
 
     private String callStringHandler(String name, JSObject... args) {
@@ -98,23 +118,7 @@ public class JsRISCVIO extends RISCVIO {
         if (result instanceof JSString) {
             return ((JSString) result).stringValue();
         }
-        throw new IllegalArgumentException("Handler " + name + " did not return a string");
-    }
-
-    private char callCharHandler(String name, JSObject... args) {
-        String result = callStringHandler(name, args);
-        if (result.length() == 1) {
-            return result.charAt(0);
-        }
-        throw new IllegalArgumentException("Handler " + name + " did not return a char");
-    }
-
-    private float callFloatHandler(String name, JSObject... args) {
-        Object result = callHandler(name, args);
-        if (result instanceof JSNumber) {
-            return ((JSNumber) result).floatValue();
-        }
-        throw new IllegalArgumentException("Handler " + name + " did not return a float");
+        throw new JsHandlerFailure("Handler " + name + " did not return a string", null);
     }
 
     private double callDoubleHandler(String name, JSObject... args) {
@@ -122,8 +126,43 @@ public class JsRISCVIO extends RISCVIO {
         if (result instanceof JSNumber) {
             return ((JSNumber) result).doubleValue();
         }
-        throw new IllegalArgumentException("Handler " + name + " did not return a double");
+        throw new JsHandlerFailure("Handler " + name + " did not return a double", null);
     }
+
+    /**
+     * Calls a handler that answers like a read, with a tuple of the byte count (0 at the end, -1
+     * on failure) and the bytes read, and copies the bytes into {@code destination}.
+     */
+    private int callReadHandler(String name, byte[] destination, int length, JSObject... args) {
+        JSObject result = callHandler(name, args);
+        if (result instanceof JSArray) {
+            JSArray<JSObject> tuple = (JSArray<JSObject>) result;
+            if (tuple.getLength() == 2 && tuple.get(0) instanceof JSNumber && tuple.get(1) instanceof JSArray) {
+                int count = ((JSNumber) tuple.get(0)).intValue();
+                if (count < 0) return -1;
+                // The handler answers with plain JavaScript numbers, which is what its published
+                // type says.
+                JSArray<JSNumber> bytes = (JSArray<JSNumber>) tuple.get(1);
+                int copied = Math.min(Math.min(bytes.getLength(), length), destination.length);
+                for (int i = 0; i < copied; i++) destination[i] = (byte) bytes.get(i).intValue();
+                return Math.min(count, copied);
+            }
+        }
+        throw new JsHandlerFailure("Handler " + name + " must return a tuple of the byte count and the bytes read", null);
+    }
+
+    /** A Java byte array as the plain array of numbers from 0 to 255 the handler types promise. */
+    private static JSArray<JSNumber> toByteNumbers(byte[] bytes) {
+        JSArray<JSNumber> numbers = JSArray.create(bytes.length);
+        for (int i = 0; i < bytes.length; i++) numbers.set(i, JSNumber.valueOf(bytes[i] & 0xff));
+        return numbers;
+    }
+
+    @JSBody(params = "value", script = "return value === null;")
+    private static native boolean isNull(JSObject value);
+
+    @JSBody(params = "value", script = "return value === null || value === void 0;")
+    private static native boolean isNullish(JSObject value);
 
 
     @Override
@@ -137,29 +176,13 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     @Override
-    public void writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError {
-        callHandler("writeFile", JSNumber.valueOf(fileDescriptor), JSArray.of(buffer));
+    public int writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError {
+        return callIntHandler("writeFile", JSNumber.valueOf(fileDescriptor), toByteNumbers(buffer));
     }
 
     @Override
     public int readFile(int fileDescriptor, byte[] destination, int length) throws RISCVIOError {
-        JSObject result = callHandler("readFile", JSNumber.valueOf(fileDescriptor), JSArray.of(destination), JSNumber.valueOf(length));
-        if(result instanceof JSArray){
-            JSArray<JSObject> array = (JSArray<JSObject>) result;
-            if(array.getLength() != 2){
-                throw new RISCVIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
-            }
-            JSNumber eof = (JSNumber) array.get(0);
-            // The handler answers with plain JavaScript numbers, which is what its published
-            // type says. Reading them as boxed Java Bytes instead made the unboxing call a
-            // method the numbers do not have, so callers had to hand over fake Byte objects.
-            JSArray<JSNumber> buffer = (JSArray<JSNumber>) array.get(1);
-            for(int i = 0; i < buffer.getLength(); i++){
-                destination[i] = (byte) buffer.get(i).intValue();
-            }
-            return eof.intValue();
-        }
-        throw new RISCVIOError("Read file expects a tuple of 2 elements, the first being if the EOF was reached (-1), and the second being the buffer");
+        return callReadHandler("readFile", destination, length, JSNumber.valueOf(fileDescriptor), JSNumber.valueOf(length));
     }
 
     @Override
@@ -167,9 +190,13 @@ public class JsRISCVIO extends RISCVIO {
         return callIntHandler("confirm", JSString.valueOf(message));
     }
 
+    /** The handler answers null when the user cancels the dialog. */
     @Override
     public String inputDialog(String message) {
-        return callStringHandler("inputDialog", JSString.valueOf(message));
+        JSObject result = callHandler("inputDialog", JSString.valueOf(message));
+        if (isNull(result)) return null;
+        if (result instanceof JSString) return ((JSString) result).stringValue();
+        throw new JsHandlerFailure("Handler inputDialog did not return a string or null", null);
     }
 
     @Override
@@ -178,42 +205,19 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     @Override
-    public int askInt(String message) {
-        return callIntHandler("askInt", JSString.valueOf(message));
-    }
-
-
-    @Override
-    public double askDouble(String message) {
-        return callDoubleHandler("askDouble", JSString.valueOf(message));
+    public String readInt() {
+        return callStringHandler("readInt");
     }
 
     @Override
-    public float askFloat(String message) {
-        return callFloatHandler("askFloat", JSString.valueOf(message));
-    }
-
-
-    @Override
-    public String askString(String message) {
-        return callStringHandler("askString", JSString.valueOf(message));
+    public String readFloat() {
+        return callStringHandler("readFloat");
     }
 
     @Override
-    public int readInt() {
-        return callIntHandler("readInt");
+    public String readDouble() {
+        return callStringHandler("readDouble");
     }
-
-    @Override
-    public double readDouble() {
-        return callDoubleHandler("readDouble");
-    }
-
-    @Override
-    public float readFloat() {
-        return callFloatHandler("readFloat");
-    }
-
 
     @Override
     public String readString() {
@@ -221,43 +225,13 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     @Override
-    public char readChar() {
-        return callCharHandler("readChar");
+    public String readChar() {
+        return callStringHandler("readChar");
     }
 
     @Override
-    public void logLine(String message) {
-        callHandler("logLine", JSString.valueOf(message));
-    }
-
-    @Override
-    public void log(String message) {
-        callHandler("log", JSString.valueOf(message));
-    }
-
-    @Override
-    public void printChar(char c) {
-        callHandler("printChar", JSString.valueOf(String.valueOf(c)));
-    }
-
-    @Override
-    public void printDouble(double d) {
-        callHandler("printDouble", JSNumber.valueOf(d));
-    }
-
-    @Override
-    public void printFloat(float f) {
-        callHandler("printFloat", JSNumber.valueOf(f));
-    }
-
-    @Override
-    public void printInt(int i) {
-        callHandler("printInt", JSNumber.valueOf(i));
-    }
-
-    @Override
-    public void printString(String l) {
-        callHandler("printString", JSString.valueOf(l));
+    public void printString(String text) {
+        callHandler("printString", JSString.valueOf(text));
     }
 
     @Override
@@ -270,24 +244,9 @@ public class JsRISCVIO extends RISCVIO {
         return callDoubleHandler("time");
     }
 
-    /**
-     * The handler answers like readFile, with a tuple of the byte count (0 at end of input, -1 on
-     * failure) and the bytes read.
-     */
     @Override
     public int stdIn(byte[] buffer, int length) {
-        JSObject result = callHandler("stdIn", JSArray.of(buffer), JSNumber.valueOf(length));
-        if (result instanceof JSArray) {
-            JSArray<JSObject> array = (JSArray<JSObject>) result;
-            if (array.getLength() == 2) {
-                int count = ((JSNumber) array.get(0)).intValue();
-                JSArray<JSNumber> bytes = (JSArray<JSNumber>) array.get(1);
-                int copied = Math.min(Math.min(bytes.getLength(), length), buffer.length);
-                for (int i = 0; i < copied; i++) buffer[i] = (byte) bytes.get(i).intValue();
-                return count < 0 ? -1 : Math.min(count, copied);
-            }
-        }
-        throw new IllegalArgumentException("Handler stdIn must return a tuple of the byte count and the bytes read");
+        return callReadHandler("stdIn", buffer, length, JSNumber.valueOf(length));
     }
 
     @Override
@@ -297,11 +256,30 @@ public class JsRISCVIO extends RISCVIO {
 
     @Override
     public void stdOut(byte[] buffer) {
-        callHandler("stdOut", JSArray.of(buffer));
+        callHandler("stdOut", toByteNumbers(buffer));
     }
 
     @Override
     public void stdErr(byte[] buffer) {
-        callHandler("stdErr", JSArray.of(buffer));
+        callHandler("stdErr", toByteNumbers(buffer));
+    }
+
+    /**
+     * The seed random generator {@code index} starts from: the randomSeed handler's answer, or host
+     * randomness, as RARS has, when no handler is registered.
+     */
+    @Override
+    public double randomSeed(int index) {
+        if (!handlers.containsKey("randomSeed")) {
+            return hostRandomSeed();
+        }
+        JSObject result = callHandler("randomSeed", JSNumber.valueOf(index));
+        if (result instanceof JSNumber) {
+            double seed = ((JSNumber) result).doubleValue();
+            if (seed >= 0 && seed < JavaRandom.SEED_LIMIT && seed == Math.floor(seed)) {
+                return seed;
+            }
+        }
+        throw new JsHandlerFailure("Handler randomSeed did not return a whole number from 0 to 2^48 - 1", null);
     }
 }

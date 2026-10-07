@@ -8,6 +8,7 @@ import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.syscalls.RandomStreams;
 import app.specy.rars.Settings;
 
 import java.util.ArrayList;
@@ -76,17 +77,72 @@ public class BackStepper {
          * rather than taking a stack slot per value, so that a poke costs one slot of the history
          * capacity and can never be evicted in part.
          */
-        POKE
+        POKE,
+        /**
+         * An exit service: puts back whether the program had exited (param1, 0 or 1) and the exit
+         * code it had (param2), the code the exit set being the written value. Undoing it leaves
+         * the program running on the ecall again.
+         */
+        EXIT_RESTORE,
+        /**
+         * A random service: puts generator param1 back in the state it had before the service
+         * advanced or reseeded it, its high half in param2 and its low half in the written int, or
+         * forgets the generator when param2 is RandomStreams.ABSENT. The state is the simulator's
+         * own, so the getters report neither half.
+         */
+        RANDOM_STREAM_RESTORE
     }
 
     // Flag to mark BackStep object as prepresenting specific situation: user manipulates
     // memory/register value via GUI after assembling program but before running it.
     private static final int NOT_PC_VALUE = -1;
 
-    // Memo for the statement lookup every push makes; see BackStep.assign.
-    private int lastStatementPc = NOT_PC_VALUE;
-    private ProgramStatement lastStatement;
+    // Module-lifetime identities: neither Undo, initialize nor reassembly can reuse one.
+    // Only the bounded BackStep slots retain identities; no execution journal grows with a run.
+    private static long nextSerial = 1;
+    private long instructionSerial;
+    private long pokeSerial;
+    private int instructionPc;
+    private boolean instructionDiscarded;
 
+    private static long allocateSerial() {
+        if (nextSerial == Long.MAX_VALUE) {
+            throw new IllegalStateException("Instruction serial space exhausted");
+        }
+        return nextSerial++;
+    }
+
+    /** Begins one dynamic instruction, including one that exits or fails. */
+    public void beginInstruction(int pc, boolean recording) {
+        if (instructionSerial != 0 || pokeOpen()) {
+            throw new IllegalStateException("An instruction or poke is already executing");
+        }
+        instructionSerial = allocateSerial();
+        instructionPc = pc;
+        instructionDiscarded = !recording || !engaged || backSteps.capacity == 0;
+        // Undo must never cross a gap where execution had no recorded restores.
+        if (instructionDiscarded) clearHistory();
+    }
+
+    /** Finishes even a failed instruction, giving a write-free instruction its own entry. */
+    public void endInstruction() {
+        try {
+            if (!instructionDiscarded) addDoNothing(instructionPc);
+        } finally {
+            instructionSerial = 0;
+        }
+    }
+
+    /** Zero outside execution; never rewound or reused. Available across an awaited handler. */
+    public long getCurrentInstructionSerial() {
+        return instructionSerial;
+    }
+
+    /** A reset forgets retained restores without rewinding the serial allocator. */
+    public void clearHistory() {
+        backSteps.size = 0;
+        backSteps.top = -1;
+    }
 
     private boolean engaged;
     private final BackstepStack backSteps;
@@ -188,18 +244,13 @@ public class BackStepper {
     // all store their result in register pairs which results in two store operations.
     // Both must be undone transparently, so we need to detect that multiple steps happen
     // together and carry out all of them here.
-    // Use a do-while loop based on the backstep's program statement reference.
+    // Use a do-while loop based on the dynamic instruction identity.
     public void backStep() {
         if (engaged && !backSteps.empty()) {
             BackStep first = backSteps.peek();
             engaged = false; // GOTTA DO THIS SO METHOD CALL IN SWITCH WILL NOT RESULT IN NEW ACTION ON STACK!
             do {
                 BackStep step = backSteps.pop();
-            /*
-                System.out.println("backstep POP: action "+step.action+" pc "+rars.util.Binary.intToHexString(step.pc)+
-            	                   " source "+((step.ps==null)? "none":step.ps.getSource())+
-            							 " parm1 "+step.param1+" parm2 "+step.param2);
-            */
                 if (step.pc != NOT_PC_VALUE) {
                     RegisterFile.setProgramCounter(step.pc);
                 }
@@ -211,6 +262,9 @@ public class BackStepper {
                             PokeRestore restore = step.pokeRestores[i];
                             applyRestore(restore.action, restore.param1, restore.param2);
                         }
+                    } else if (step.action == Action.RANDOM_STREAM_RESTORE) {
+                        // The one restore that needs a third value: the state's low half.
+                        RandomStreams.restore(step.param1, (int) step.param2, step.param3Int);
                     } else {
                         applyRestore(step.action, step.param1, step.param2);
                     }
@@ -265,28 +319,18 @@ public class BackStepper {
                 break;
             case DO_NOTHING:
                 break;
+            case EXIT_RESTORE:
+                ProgramExit.restore(param1 != 0, (int) param2);
+                break;
             case POKE:
-                break; // handled by the caller, which holds the writes
+            case RANDOM_STREAM_RESTORE:
+                break; // handled by the caller, which holds the writes or the state's low half
         }
     }
 
-    /**
-     * Whether two back steps are undone together by one {@link #backStep()} call, which is what
-     * makes them one entry of the history. Instruction steps are grouped by the statement they
-     * belong to, exactly as backStep() has always grouped them - two host writes made before
-     * anything ran share the null statement and so still group together. A poke is a single back
-     * step holding all of its writes, so it groups with nothing: not with the instruction below it,
-     * and not with the poke before it.
-     *
-     * @param one   a back step.
-     * @param other the back step below it on the stack.
-     * @return true if undoing one also undoes the other.
-     */
+    /** Two restores belong together exactly when they share a dynamic identity. */
     public static boolean sameGroup(BackStep one, BackStep other) {
-        if (one.isPoke() || other.isPoke()) {
-            return false;
-        }
-        return one.ps == other.ps;
+        return one.serial == other.serial;
     }
 
     /**
@@ -305,6 +349,8 @@ public class BackStepper {
             nextPokeGroup = -2;
         }
         pokeGroup = nextPokeGroup--;
+        pokeSerial = allocateSerial();
+        if (!engaged) clearHistory();
         pokeRestores = new ArrayList<>();
         return pokeGroup;
     }
@@ -327,7 +373,7 @@ public class BackStepper {
         // the transaction it is closing.
         pokeGroup = NO_POKE_GROUP;
         pokeRestores = null;
-        if (restores.isEmpty()) {
+        if (restores.isEmpty() || backSteps.capacity == 0) {
             return false;
         }
         backSteps.pushPoke(group, restores.toArray(new PokeRestore[0]));
@@ -560,10 +606,29 @@ public class BackStepper {
      * Add a new "back step" (the undo action) to the stack.  The action here
      * is to do nothing!  This is just a place holder so when user is backstepping
      * through the program no instructions will be skipped.  Cosmetic. If the top of the
-     * stack has the same PC counter, the do-nothing action will not be added.
+     * stack has the same dynamic serial, the do-nothing action will not be added.
      */
+    /**
+     * Add a new "back step" (the undo action) to the stack. The action here is to undo an exit:
+     * the program had exited ({@code wasExited}) or not, and had exit code {@code previousCode},
+     * before the exit service set {@code code}.
+     */
+    public void addExitRestore(boolean wasExited, int previousCode, int code) {
+        backSteps.push(Action.EXIT_RESTORE, pc(), wasExited ? 1 : 0, previousCode, code, 0);
+    }
+
+    /**
+     * Add a new "back step" (the undo action) to the stack. The action here is to put random
+     * generator {@code index} back in the state a service is about to change: {@code high} and
+     * {@code low} are its two halves, or {@code high} is RandomStreams.ABSENT when the generator
+     * does not exist yet.
+     */
+    public void addRandomStreamRestore(int index, int high, int low) {
+        backSteps.push(Action.RANDOM_STREAM_RESTORE, pc(), index, high, low, 0);
+    }
+
     public void addDoNothing(int pc) {
-        if (backSteps.empty() || backSteps.peek().pc != pc) {
+        if (backSteps.empty() || backSteps.peek().serial != instructionSerial) {
             backSteps.push(Action.DO_NOTHING, pc);
         }
     }
@@ -571,9 +636,9 @@ public class BackStepper {
 
     // Represents a "back step" (undo action) on the stack.
     public class BackStep {
+        private long serial;
         private Action action;  // what do do MEMORY_RESTORE_WORD, etc
         private int pc;      // program counter value when original step occurred
-        private ProgramStatement ps;   // statement whose action is being "undone" here
         private int param1;  // first parameter required by that action
         private long param2;  // optional second parameter required by that action
         /*
@@ -626,59 +691,17 @@ public class BackStepper {
             return pokeGroup;
         }
 
-        // it is critical that BackStep object get its values by calling this method
-        // rather than assigning to individual members, because of the technique used
-        // to set its ps member (and possibly pc).
+        // Recycled entries take the current dynamic identity and the PC captured at its start.
         private void assign(Action act, int programCounter, int parm1, long parm2) {
             action = act;
+            serial = instructionSerial != 0 ? instructionSerial : allocateSerial();
+            programCounter = instructionSerial != 0 ? instructionPc : programCounter;
             pc = programCounter;
             // Stack entries are recycled, so never inherit the last poke that used this slot.
             pokeGroup = NO_POKE_GROUP;
             pokeRestores = null;
-            // Client does not have direct access to program statement, and rather than making all
-            // of them go through the methods below to obtain it, we will do it here.
-            // Want the program statement but do not want observers notified.
-            //
-            // The lookup is guarded rather than wrapped in a bare catch: `pc()` is the program
-            // counter minus one instruction, so a branch taken to the first instruction of the text
-            // segment asks for the word below it, and every push on such a step used to build and
-            // throw an AddressErrorException. Filling in that exception's stack trace and its
-            // formatted message dominated simulation of any loop whose target is the entry point.
-            //
-            // The result is memoised on the program counter it was read for, because an instruction
-            // pushes more than one entry and every one of them asks for the same statement. Only
-            // the grouping in `backStep` reads `ps`, so a program that rewrote the instruction at
-            // this address between two pushes would change how its undo entries group, not what any
-            // of them restores.
-            ProgramStatement statement;
-            if (programCounter == lastStatementPc) {
-                statement = lastStatement;
-            } else {
-                statement = null;
-                if (Memory.wordAligned(programCounter) && (Memory.inTextSegment(programCounter)
-                        || Globals.getSettings().getBooleanSetting(Settings.Bool.SELF_MODIFYING_CODE_ENABLED))) {
-                    try {
-                        statement = Globals.memory.getStatementNoNotify(programCounter);
-                    } catch (Exception e) {
-                        statement = null;
-                    }
-                }
-                lastStatementPc = programCounter;
-                lastStatement = statement;
-            }
-            if (statement == null) {
-                // The action will not be associated with any instruction, but will be carried out
-                // when popped.
-                pc = NOT_PC_VALUE; // Backstep method above will see this as flag to not set PC
-            }
-            ps = statement;
             param1 = parm1;
             param2 = parm2;
-         /*				
-            System.out.println("backstep PUSH: action "+action+" pc "+rars.util.Binary.intToHexString(pc)+
-         		                   " source "+((ps==null)? "none":ps.getSource())+
-         								 " parm1 "+param1+" parm2 "+param2);
-         */
         }
 
         // A poke belongs to no instruction: it keeps NOT_PC_VALUE so that undoing it leaves the
@@ -688,13 +711,17 @@ public class BackStepper {
         private void assignPoke(int group, PokeRestore[] restores) {
             action = Action.POKE;
             pc = NOT_PC_VALUE;
-            ps = null;
             param1 = 0;
             param2 = 0;
             param3Int = 0;
             param3Long = 0;
+            serial = pokeSerial;
             pokeGroup = group;
             pokeRestores = restores;
+        }
+
+        public long getSerial() {
+            return serial;
         }
 
         public int getAction() {
@@ -711,7 +738,8 @@ public class BackStepper {
         }
 
         public long getParam2() {
-            return param2;
+            // A generator's state is the simulator's own, not a value the program can see.
+            return action == Action.RANDOM_STREAM_RESTORE ? 0 : param2;
         }
 
         /**
@@ -720,7 +748,7 @@ public class BackStepper {
          * back in param1 and left param2 at 0.
          */
         public long getOldValue() {
-            return action == Action.PC_RESTORE ? param1 : param2;
+            return action == Action.PC_RESTORE ? param1 : getParam2();
         }
 
         /**
@@ -744,6 +772,7 @@ public class BackStepper {
                 case MEMORY_RESTORE_HALF:
                 case MEMORY_RESTORE_BYTE:
                 case PC_RESTORE:
+                case EXIT_RESTORE:
                     return param3Int;
                 default:
                     return 0;
@@ -811,20 +840,22 @@ public class BackStepper {
             return stack[slot < 0 ? slot + capacity : slot];
         }
 
-        // Moves the top onto the slot the next entry is written into, dropping the oldest entry
-        // once the stack is full.
-        private void advance() {
-            // The wrap is a comparison rather than a remainder. `capacity` is not a constant, so
-            // `%` is a real division in the generated JavaScript, and this runs two or three times
-            // per simulated instruction - it is what pays for the written value each push now
-            // stores. The walk is the same as before: the top moves up one and wraps at the
-            // capacity, and the size stops growing once the stack is full, from which point the
-            // entry the top lands on is the oldest one, overwritten as it always was.
-            int next = top + 1;
-            top = (next == capacity) ? 0 : next;
-            if (size < capacity) {
-                size++;
+        // Make room by evicting the oldest complete group, never half an instruction.
+        // If this instruction alone exceeded capacity, forget it and the rest of its writes.
+        private boolean advance() {
+            if (capacity == 0 || instructionDiscarded && instructionSerial != 0) return false;
+            if (size == capacity) {
+                long oldest = fromTop(size - 1).serial;
+                do { size--; } while (size > 0 && fromTop(size - 1).serial == oldest);
+                if (oldest == instructionSerial && instructionSerial != 0) {
+                    instructionDiscarded = true;
+                    return false;
+                }
             }
+            int next = top + 1;
+            top = next == capacity ? 0 : next;
+            size++;
+            return true;
         }
 
         /**
@@ -847,7 +878,7 @@ public class BackStepper {
                 pokeRestores.add(new PokeRestore(act, parm1, parm2));
                 return;
             }
-            advance();
+            if (!advance()) return;
             // We'll re-use existing objects rather than create/discard each time.
             // Must use assign() method rather than series of assignment statements!
             BackStep step = slot();
@@ -864,7 +895,7 @@ public class BackStepper {
         // The one entry a finished poke becomes. It is pushed by endPoke(), after the transaction
         // has been closed, so it takes the ordinary slot an instruction's step would.
         private void pushPoke(int group, PokeRestore[] restores) {
-            advance();
+            if (!advance()) return;
             slot().assignPoke(group, restores);
         }
 

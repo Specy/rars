@@ -1,9 +1,9 @@
 package app.specy.rars.riscv.syscalls;
 
 import app.specy.rars.ExitingException;
-import app.specy.rars.Globals;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.simulator.ProgramExit;
 
 /*
 Copyright (c) 2003-2006,  Pete Sanderson and Kenneth Vollmar
@@ -42,7 +42,7 @@ public class SyscallExit extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
-        Globals.exitCode = 0;
+        ProgramExit.exit(0);
         throw new ExitingException();  // empty exception list.
     }
 }

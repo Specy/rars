@@ -1,9 +1,9 @@
 package app.specy.rars.riscv.syscalls;
 
 import app.specy.rars.ExitingException;
-import app.specy.rars.Globals;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
+import app.specy.rars.simulator.ProgramExit;
 import app.specy.rars.riscv.hardware.RegisterFile;
 
 /*
@@ -40,7 +40,7 @@ public class SyscallExit2 extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
-        Globals.exitCode = RegisterFile.getValue("a0");
+        ProgramExit.exit(RegisterFile.getValue("a0"));
         throw new ExitingException(); // empty error list
     }
 }

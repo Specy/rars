@@ -4,10 +4,11 @@ import app.specy.rars.*;
 import app.specy.rars.riscv.*;
 import app.specy.rars.riscv.fs.*;
 import app.specy.rars.riscv.hardware.*;
+import app.specy.rars.util.JavaNumberText;
 import app.specy.rars.util.SystemIO;
+import app.specy.rars.util.Utf8;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.*;
 
@@ -23,6 +24,8 @@ import java.util.regex.*;
  */
 public final class GnuAssembler {
     private static final int MAX_BYTES = 16 * 1024 * 1024;
+    /** The page size the heap is aligned to when it follows static data, as a kernel aligns the break. */
+    private static final long PAGE_BYTES = 4096;
     private static final BigInteger ZERO = BigInteger.ZERO, ONE = BigInteger.ONE;
     // Section families, in layout order. Text is the only executable family, writable
     // families start at INIT and zeroed ones at BSS.
@@ -86,6 +89,8 @@ public final class GnuAssembler {
      */
     private boolean legacyGlobals;
     private Section legacyText, legacyData;
+    /** Where the linked program's heap starts; see {@link #heapStart()}. */
+    private long heapStart;
 
     private final class Section {
         final Unit unit;
@@ -167,6 +172,14 @@ public final class GnuAssembler {
         for (RISCVprogram program : programs) units.add(new Unit(program, units.size()));
     }
     public ErrorList getErrors() { return errors; }
+
+    /**
+     * Where the linked program's heap, and so the first block sbrk hands out, starts: RARS's heap
+     * base, or, once static data reaches past it, the first page after static data, where ld and
+     * a kernel put the break after .bss. A RARS-dialect program linking members keeps RARS's heap
+     * base. Valid after a successful {@link #assemble()} or {@link #linkAfter}.
+     */
+    public int heapStart() { return (int) heapStart; }
 
     /** The global symbols one GNU unit defines and the ones it needs from elsewhere. */
     public static final class UnitSymbols {
@@ -415,7 +428,8 @@ public final class GnuAssembler {
                     total += position - text;
                 }
                 long end = position + section.size;
-                require(end <= 0xffffffffL && (section.size == 0 || (family == TEXT ? Memory.inTextSegment((int)(end - 1)) : Memory.inDataSegment((int)(end - 1)))), "Section exceeds mapped memory: " + section.name);
+                if (family == TEXT) require(end <= 0xffffffffL && (section.size == 0 || Memory.inTextSegment((int)(end - 1))), "Section exceeds mapped memory: " + section.name);
+                else if (section.size != 0) requireStaticDataFits(end);
                 if (family == TEXT) text = end; else data = end;
                 total += section.size;
             }
@@ -425,7 +439,36 @@ public final class GnuAssembler {
             }
         }
         require(total <= MAX_BYTES, "Assembly exceeds 16 MiB emission limit");
-        require(data <= Integer.toUnsignedLong(Memory.heapBaseAddress), "Static data reaches the heap at 0x" + Integer.toHexString(Memory.heapBaseAddress));
+        long heapBase = Integer.toUnsignedLong(Memory.heapBaseAddress);
+        if (legacyGlobals) {
+            // Members linked after a RARS-dialect program keep RARS's layout, whose heap starts at
+            // its base whatever lies below it, so their data must end before it.
+            require(data <= heapBase, "Static data reaches the heap at 0x" + Integer.toHexString(Memory.heapBaseAddress));
+            heapStart = heapBase;
+        } else {
+            heapStart = data <= heapBase ? heapBase : (data + PAGE_BYTES - 1) & -PAGE_BYTES;
+        }
+    }
+
+    /**
+     * Static data and the heap after it share the data segment, which ends below the stack and
+     * memory-mapped IO: 4128768 bytes from 0x10010000 to 0x10400000 in RARS's memory layout.
+     */
+    private static void requireStaticDataFits(long end) {
+        long limit = Integer.toUnsignedLong(Memory.dataSegmentLimitAddress);
+        String where = "the end of the data segment";
+        if (Integer.toUnsignedLong(Memory.stackLimitAddress) + 1 < limit) {
+            limit = Integer.toUnsignedLong(Memory.stackLimitAddress) + 1;
+            where = "the stack";
+        }
+        if (Integer.toUnsignedLong(Memory.memoryMapBaseAddress) < limit) {
+            limit = Integer.toUnsignedLong(Memory.memoryMapBaseAddress);
+            where = "memory-mapped IO";
+        }
+        long base = Integer.toUnsignedLong(Memory.dataBaseAddress);
+        require(end <= limit, "Static data ends at 0x" + Long.toHexString(end) + ", past " + where + " at 0x"
+                + Long.toHexString(limit) + ": .data, .rodata, .bss and common symbols together fit in "
+                + (limit - base) + " bytes from 0x" + Long.toHexString(base));
     }
 
     /** Where a RARS-dialect program's global lives, for the checks a section supplies: text or data. */
@@ -747,7 +790,8 @@ public final class GnuAssembler {
                 ByteArrayOutputStream bytes = new ByteArrayOutputStream();
                 for (String arg : args) {
                     long bits;
-                    try { bits = width == 4 ? Float.floatToRawIntBits(Float.parseFloat(arg)) & 0xffffffffL : Double.doubleToRawLongBits(Double.parseDouble(arg)); }
+                    // Correctly rounded straight to the width, as GNU as does.
+                    try { bits = width == 4 ? Float.floatToRawIntBits(JavaNumberText.parseFloat(arg)) & 0xffffffffL : Double.doubleToRawLongBits(JavaNumberText.parseDouble(arg)); }
                     catch (NumberFormatException exception) { throw new Invalid("Invalid floating literal: " + arg); }
                     for (int i = 0; i < width; i++) bytes.write((int)(bits >>> (8 * i)) & 255);
                 }
@@ -1281,7 +1325,7 @@ public final class GnuAssembler {
         for (int i = 0; i < source.length(); i++) {
             char c = source.charAt(i);
             if (c != '\\') { literal.append(c); continue; }
-            byte[] utf = literal.toString().getBytes(StandardCharsets.UTF_8); output.write(utf, 0, utf.length); literal.setLength(0);
+            byte[] utf = Utf8.encode(literal); output.write(utf, 0, utf.length); literal.setLength(0);
             require(++i < source.length(), "Incomplete string escape");
             c = source.charAt(i);
             int value;
@@ -1303,7 +1347,7 @@ public final class GnuAssembler {
             }
             output.write(value);
         }
-        byte[] utf = literal.toString().getBytes(StandardCharsets.UTF_8); output.write(utf, 0, utf.length);
+        byte[] utf = Utf8.encode(literal); output.write(utf, 0, utf.length);
         return output.toByteArray();
     }
 }

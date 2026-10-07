@@ -3,6 +3,7 @@ package app.specy.rarsjs;
 import app.specy.rars.riscv.hardware.AccessNotice;
 import app.specy.rars.riscv.hardware.MemoryAccessNotice;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.core.JSFunction;
 import org.teavm.jso.core.JSNumber;
@@ -66,10 +67,19 @@ class JsMemoryObserver implements Observer {
         }
         JSNumber address = JSNumber.valueOf(notice.getAddress());
         JSNumber value = JSNumber.valueOf(notice.getValue());
-        if (reportsLength) {
-            handler.call(handler, address, JSNumber.valueOf(notice.getLength()), value);
-        } else {
-            handler.call(handler, address, value);
+        try {
+            if (reportsLength) {
+                handler.call(handler, address, JSNumber.valueOf(notice.getLength()), value);
+            } else {
+                handler.call(handler, address, value);
+            }
+        } catch (Throwable thrown) {
+            // An observer is host code like an IO handler: a run it fails ends as the host's failure.
+            JSObject reason = JSExceptions.getJSException(thrown);
+            throw new JsHandlerFailure("Memory observer threw: " + describe(reason), reason);
         }
     }
+
+    @JSBody(params = "error", script = "return error instanceof Error ? (error.message || String(error)) : String(error);")
+    private static native String describe(JSObject error);
 }

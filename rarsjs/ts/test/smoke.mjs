@@ -25,7 +25,7 @@ assert.equal('makeRiscVFromSource' in RISCV, false, 'the v2 single-source static
 
 const SOURCE = `
     .data
-msg:    .string "sum = "
+msg:    .string "sum (Σ 1…10) = "
 
     .text
     .globl main
@@ -69,10 +69,8 @@ main:
 // so an unexpected ecall fails the test instead of silently doing nothing.
 const HANDLER_NAMES = [
     'openFile', 'closeFile', 'writeFile', 'readFile', 'confirm', 'inputDialog',
-    'outputDialog', 'askDouble', 'askFloat', 'askInt', 'askString', 'readDouble',
-    'readFloat', 'readInt', 'readString', 'readChar', 'logLine', 'log', 'printChar',
-    'printDouble', 'printFloat', 'printInt', 'printString', 'sleep', 'time', 'stdIn', 'stdOut',
-    'stdErr',
+    'outputDialog', 'readDouble', 'readFloat', 'readInt', 'readString', 'readChar',
+    'printString', 'sleep', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr', 'randomSeed',
 ]
 
 RISCV.setIs64Bit(false)
@@ -99,6 +97,7 @@ assert.ok(realError.errors.some(error => error.isWarning === false), 'invalid as
 assert.ok(realErrorProgram.getTokenizedLines().length > 0, 'tokens should remain available after completed tokenization')
 assert.throws(() => realErrorProgram.getCompiledStatements(), /not been assembled successfully/)
 assert.throws(() => realErrorProgram.initialize(true), /not been assembled successfully/)
+assert.throws(() => realErrorProgram.getHeapStart(), /not been assembled successfully/)
 
 // The simulator is a shared global, so the two width modes run in sequence.
 for (const is64Bit of [false, true]) {
@@ -110,9 +109,7 @@ for (const is64Bit of [false, true]) {
 
     registerHandlers(riscv, {
         ...Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])),
-        printInt: value => output.push(String(value)),
         printString: value => output.push(value),
-        printChar: value => output.push(value),
     })
 
     // No simulation has run yet, so there is no stop reason to report.
@@ -134,15 +131,20 @@ for (const is64Bit of [false, true]) {
     }
 
     assert.ok(riscv.terminated, `${label}: program did not terminate within ${steps} steps`)
-    assert.equal(output.join(''), 'sum = 55', `${label}: unexpected program output`)
+    assert.equal(output.join(''), 'sum (Σ 1…10) = 55', `${label}: the literal is stored and printed as UTF-8`)
+    assert.equal(riscv.getHeapStart(), 0x10040000, `${label}: the heap starts at the heap base`)
     assert.equal(riscv.getRegisterValue('t0'), 55, `${label}: wrong accumulator`)
     assert.equal(riscv.getRegisterValue('t1'), 11, `${label}: wrong counter`)
     assert.ok(riscv.getUndoStack().length > 0, `${label}: undo stack should record executed steps`)
 
     // The stop reason crosses from Java as an ordinal, so it must land on a
-    // named member of StopReason rather than an opaque value.
+    // named member of StopReason rather than an opaque value. `terminated` is read from the
+    // program's state, so the loop ends on the exit itself rather than on a later step that
+    // finds nothing to run.
     const reason = riscv.getStopReason()
     assert.ok(StopReason[reason] !== undefined, `${label}: unknown stop reason ${reason}`)
+    assert.equal(reason, StopReason.NORMAL_TERMINATION, `${label}: the loop ends on the exit`)
+    assert.equal(riscv.exitCode, 0, `${label}: exit gives code 0`)
 
     console.log(`ok - ${label}: ran ${steps} instructions, printed "${output.join('')}", stopped on ${StopReason[reason]}`)
 }
@@ -491,15 +493,14 @@ assert.deepEqual(writes.slice(writesBeforeUndo), [
 ], 'undo should report each restored word, newest first, as an ordinary write')
 
 // Assembling clears memory but not the registrations, so a rebuilt program is still observed.
-// `terminated` reports the last stop reason and initialize() does not clear it, so the second run
-// is driven by simulateWithLimit rather than by a loop over `terminated`.
 const writesBeforeRebuild = writes.length
 const reassembled = peripherals.assemble()
 assert.equal(reassembled.hasErrors, false, `reassembly failed: ${reassembled.report}`)
 peripherals.setPeripheralWord(REGISTER, 0x42)
 peripherals.initialize(true)
-// The exit syscall stops the run itself, so this is NORMAL_TERMINATION; the loop above only ever
-// saw CLIFF_TERMINATION because `terminated` ignores every other reason and let it step off the end.
+// The exit syscall stops the run itself, so this is NORMAL_TERMINATION, and initialize() started a
+// run that has not exited.
+assert.equal(peripherals.terminated, false)
 const rebuiltReason = await peripherals.simulateWithLimit(10_000)
 assert.equal(rebuiltReason, StopReason.NORMAL_TERMINATION, 'the rebuilt program should run to its exit')
 assert.deepEqual(writes.slice(writesBeforeRebuild, writesBeforeRebuild + 3), [
@@ -1230,9 +1231,12 @@ main:
     li   t0, 0xFEDCBA9876543210
     la   t1, dbuf
     sd   t0, 0(t1)
+    csrr t2, time
     li   a7, 10
     ecall
 `)
+    // The time counter reads the time handler's clock, past 32 bits as a clock in milliseconds is.
+    program.registerHandler('time', () => 1_700_000_000_123)
     await runToEnd(program)
     const stack = Array.from(program.getUndoStack())
 
@@ -1256,58 +1260,60 @@ main:
     assert.notEqual(dword.param2, Number(dword.oldValue),
         'which is exactly the truncation oldValue exists to undo')
 
-    // The clock sample the simulator takes is the other 64 bit value on this stack, and it is a
-    // write that lands in an instruction's entry like any other, so it reports both sides: the
+    // The time counter reading is the other 64 bit value on this stack, and it is a write that
+    // lands in the reading instruction's entry like any other, so it reports both sides: the
     // millisecond reading it left beside the one it replaced.
-    for (const step of withAction(stack, BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)) {
-        assert.equal(BigInt.asIntN(32, BigInt(step.oldValue)), BigInt(step.param2),
-            'param2 is the low half of the value oldValue reports whole')
-        assert.ok(BigInt(step.newValue) > BigInt(step.oldValue),
-            'the clock backdoor reports the reading it wrote, which is later than the one it replaced')
-    }
+    const reading = only(stack, BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)
+    assert.equal(reading.param1, 0xC01, 'the time counter')
+    assert.equal(reading.oldValue, '0', 'it reads 0 until the program reads it')
+    assert.equal(reading.newValue, String(1_700_000_000_123), 'and then the whole reading, unlike param2')
+    assert.equal(BigInt.asIntN(32, BigInt(reading.newValue)), BigInt.asIntN(32, 1_700_000_000_123n))
+    assert.equal(BigInt(program.getRegistersValuesLong()[RISCV_REGISTERS.indexOf('t2')]), 1_700_000_000_123n)
     RISCV.setIs64Bit(false)
 }
 
-// 2b. The clock backdoor, forced: a sample is recorded only when the millisecond turned over, so
-// this runs long enough for that to be certain, with a history big enough to still hold the
-// samples, and checks the written value against the clock and against the next write's old value.
+// 2b. The time counter, read in a loop: each read sets it from the time handler and records the
+// reading against the reading instruction, so the old value of one write is the new value of the
+// one before it. A reading the counter already holds records nothing, as the clock stood still.
 {
     RISCV.setIs64Bit(false)
     const ticking = makeSingleFileRiscV(`
     .text
     .globl main
 main:
-    li   t0, 0
+    li   t0, 6
 loop:
-    addi t0, t0, 1
-    j    loop
+    rdtime t1
+    rdtimeh t2
+    addi t0, t0, -1
+    bnez t0, loop
+    li   a7, 10
+    ecall
 `)
     registerHandlers(ticking, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
-    // The loop pushes about three entries per instruction, and the simulator samples the clock
-    // every sixty fourth instruction: the history has to span more than a millisecond of simulation
-    // for a recorded sample to still be on it at the end.
-    ticking.setUndoSize(200_000)
+    // A virtual clock past 32 bits that ticks once for every second reading, so that half the
+    // readings find the value the counter already holds.
+    let calls = 0
+    const clock = () => 0x2_0000_0000 + Math.floor(calls / 2) * 3
+    ticking.registerHandler('time', () => { const now = clock(); calls++; return now })
+    ticking.setUndoSize(2000)
     const assembled = ticking.assemble()
-    assert.equal(assembled.hasErrors, false, `clock-sample assembly failed: ${assembled.report}`)
+    assert.equal(assembled.hasErrors, false, `time-counter assembly failed: ${assembled.report}`)
     ticking.initialize(true)
-    const before = BigInt(Date.now())
-    await ticking.simulateWithLimit(500_000)
-    const after = BigInt(Date.now())
-    const samples = withAction(Array.from(ticking.getUndoStack()),
-        BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)
-    assert.ok(samples.length >= 2, `expected the run to sample the clock, saw ${samples.length}`)
-    for (const step of samples) {
-        const wrote = BigInt(step.newValue)
-        assert.ok(wrote >= before && wrote <= after,
-            `the written value is the wall clock reading the simulator stored, got ${step.newValue}`)
+    await runToEnd(ticking)
+    assert.equal(calls, 12, 'every rdtime and rdtimeh asks the time handler')
+    const readings = withAction(Array.from(ticking.getUndoStack()),
+        BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR).reverse()
+    assert.equal(readings.length, 6, 'one recorded write per tick: a reading the counter holds records none')
+    for (let i = 0; i < readings.length; i++) {
+        assert.equal(readings[i].param1, 0xC01)
+        assert.equal(BigInt(readings[i].newValue), 0x2_0000_0000n + BigInt(i * 3), 'the time handler\'s clock')
+        assert.equal(readings[i].oldValue, i === 0 ? '0' : readings[i - 1].newValue,
+            'the reading one write left is the reading the next one replaced')
     }
-    // getUndoStack is newest first, so this walks the samples forwards in time: what one write left
-    // is what the next one replaced, which no reader could reconstruct from oldValue alone.
-    const ordered = samples.slice().reverse()
-    for (let i = 1; i < ordered.length; i++) {
-        assert.equal(ordered[i].oldValue, ordered[i - 1].newValue,
-            'the reading one clock write left is the reading the next one replaced')
-    }
+    const registers = Array.from(ticking.getRegistersValuesLong())
+    assert.equal(BigInt.asUintN(32, BigInt(registers[RISCV_REGISTERS.indexOf('t1')])), 15n, 'rdtime reads the low half on RV32')
+    assert.equal(BigInt(registers[RISCV_REGISTERS.indexOf('t2')]), 2n, 'and rdtimeh the high half')
 }
 
 // 3. The shape is additive: both fields are on every step of both read APIs, the existing fields are
@@ -1449,7 +1455,8 @@ console.log('ok - written values: registers, memory at its width, the pc, lossle
 // every instruction gets was skipped on the exit path, so the newest entry after an exit was the
 // instruction before the exit. A host that reads the last executed instruction off the history then
 // named that one, and one undo after an exit rolled back two instructions. The program goes on past
-// the exit, as one with functions below `main` does.
+// the exit, as one with functions below `main` does, and the exit's entry is the one that records
+// the exit itself, so that undoing it leaves the program running again.
 {
     RISCV.setIs64Bit(false)
     const makeExiting = () => {
@@ -1477,8 +1484,9 @@ helper:
         const [top, below] = Array.from(program.getUndoGroups())
         assert.equal(top.kind, 'instruction', `${label}: the newest entry is an instruction`)
         assert.equal(top.pc, ecall.address, `${label}: and it is the exit ecall`)
-        assert.deepEqual(top.steps.map(step => step.action), [BackStepAction.DO_NOTHING],
-            `${label}: which wrote nothing, and was not counted as retired`)
+        assert.deepEqual(top.steps.map(step => step.action), [BackStepAction.EXIT_RESTORE],
+            `${label}: which recorded only the exit, and was not counted as retired`)
+        assert.deepEqual([top.steps[0].oldValue, top.steps[0].newValue], ['0', '0'], `${label}: exit leaves the code at 0`)
         assert.equal(below.pc, setA7.address, `${label}: the entry below it is the instruction before the exit`)
         return ecall
     }
@@ -1486,7 +1494,11 @@ helper:
     const ran = makeExiting()
     assert.equal(await ran.simulateWithLimit(1_000), StopReason.NORMAL_TERMINATION)
     const ecall = exitsOnTheEcall(ran, 'run')
+    assert.equal(ran.terminated, true, 'the exit ends the program')
+    assert.equal(ran.getNextStatement(), null, 'and what follows the ecall is not next')
     ran.undo()
+    assert.equal(ran.terminated, false, 'undoing the exit leaves the program running')
+    assert.equal(ran.getNextStatement().address, ecall.address)
     assert.equal(ran.programCounter, ecall.address, 'one undo puts the program back on the exit ecall')
     assert.equal(Array.from(ran.getRegistersValues())[a7], 10, 'and leaves the instruction before it done')
     assert.equal(await ran.step(), StopReason.NORMAL_TERMINATION, 'stepping the ecall exits again')

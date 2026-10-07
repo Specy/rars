@@ -8,6 +8,7 @@ import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.JavaNumberText;
 
 
 
@@ -69,20 +70,9 @@ public class SyscallInputDialogDouble extends AbstractSyscall {
         //       -3: OK was chosen but no data had been input into field
 
 
-        String message = new String(); // = "";
-        int byteAddress = RegisterFile.getValue(4);
-        char ch[] = {' '}; // Need an array to convert to String
-        try {
-            ch[0] = (char) Globals.memory.getByte(byteAddress);
-            while (ch[0] != 0) // only uses single location ch[0]
-            {
-                message = message.concat(new String(ch)); // parameter to String constructor is a char[] array
-                byteAddress++;
-                ch[0] = (char) Globals.memory.getByte(byteAddress);
-            }
-        } catch (AddressErrorException e) {
-            throw new ExitingException(statement, e);
-        }
+        // The message is in a0, as for every dialog: RARS reads it from x4, which is MARS's $a0 by
+        // number, and as one byte per character.
+        String message = NullString.get(statement);
 
         // Values returned by Java's InputDialog:
         // A null return value means that "Cancel" was chosen rather than OK.
@@ -100,7 +90,7 @@ public class SyscallInputDialogDouble extends AbstractSyscall {
             {
                 RegisterFile.updateRegister("a1", -3);  // set $a1 to -3 flag
             } else {
-                double doubleValue = Double.parseDouble(inputValue);
+                double doubleValue = JavaNumberText.parseDouble(inputValue);
 
                 // Successful parse of valid input data
                 FloatingPointRegisterFile.updateRegisterLong(10, Double.doubleToRawLongBits(doubleValue));

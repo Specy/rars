@@ -55,86 +55,78 @@ export type JsInstructionToken = {
     type: string
 }
 
+/**
+ * Why a run call (`step`, `simulate`, `simulateWithLimit`, `simulateWithBreakpoints`,
+ * `simulateWithBreakpointsAndLimit`) stopped. The same enum, with the same values, as
+ * `@specy/mips`'s.
+ */
 export enum StopReason {
-    NONE = -1,         // no simulation has run yet
+    /** No run call has stopped since the program was initialized; only `getStopReason` reports it. */
+    NONE = -1,
+    /** A breakpoint address or an `ebreak` was reached. */
     BREAKPOINT,
+    /** Never returned: a runtime failure rejects the run call with a `RuntimeError` instead. */
     EXCEPTION,
-    MAX_STEPS,         // includes step mode (where maxSteps is 1)
+    /** The instruction limit was reached, which is what a single `step()` ends on. */
+    MAX_STEPS,
+    /** An exit service (10 or 93) ran, or the program had already exited and nothing ran. */
     NORMAL_TERMINATION,
-    CLIFF_TERMINATION, // run off bottom of program
+    /** The program ran off the end of its code: there is no statement at the program counter. */
+    CLIFF_TERMINATION,
+    /** Not reachable through this package. */
     PAUSE,
+    /** Not reachable through this package. */
     STOP
+}
+
+/**
+ * What a `RuntimeError` was:
+ * - `exception`: a RISC-V exception the program had no trap handler for: a misaligned or faulting
+ *   access, an illegal instruction, an instruction fetch outside the program.
+ * - `syscall`: an ecall refused its service number, arguments or input, such as "invalid integer
+ *   input (syscall 5)" or "invalid or unimplemented syscall service: 99".
+ * - `handler`: a host handler or memory observer threw, rejected or broke its contract; its `cause`
+ *   is what it threw or rejected with.
+ * - `internal`: the simulator itself failed.
+ */
+export type RuntimeErrorKind = 'exception' | 'syscall' | 'handler' | 'internal'
+
+/**
+ * The error a run call rejects with when the program fails at runtime: an `Error` named
+ * `RuntimeError` with typed fields, so that a host never parses its text. Any other rejection,
+ * such as a run call on a program that did not assemble, is the plain error it is.
+ */
+export interface RuntimeError extends Error {
+    readonly name: 'RuntimeError'
+    readonly kind: RuntimeErrorKind
+    /**
+     * The address of the instruction that failed, or of the program counter that could not be
+     * fetched, as a signed 32 bit int like `JsProgramStatement.address`.
+     */
+    readonly address: number
+    /** The failing statement's source file, or null when there is no statement. */
+    readonly sourcePath: string | null
+    /** The failing statement's one-based line in `sourcePath`, or null. */
+    readonly line: number | null
+    /**
+     * RARS's own words, without the location: "Runtime exception at 0x00400004: invalid or
+     * unimplemented syscall service: 99", "Handler readInt did not return a string".
+     */
+    readonly message: string
+    /** For a `handler` failure, what the handler threw or rejected with. */
+    readonly cause?: unknown
+}
+
+/** Whether a run call's rejection is a typed `RuntimeError`. */
+export function isRuntimeError(error: unknown): error is RuntimeError {
+    return error instanceof Error && error.name === 'RuntimeError' && typeof (error as RuntimeError).kind === 'string'
 }
 
 
 
-/*
-public abstract int openFile(String filename, int flags, boolean append) throws RISCVIOError;
-    public abstract void closeFile(int fileDescriptor) throws RISCVIOError;
-    public abstract void writeFile(int fileDescriptor, byte[] buffer) throws RISCVIOError;
-    public abstract int readFile(int fileDescriptor, byte[] destination, int length) throws RISCVIOError;
-
-
-    // 0 ---> meaning Yes
-    // 1 ---> meaning No
-    // 2 ---> meaning Cancel
-    public abstract int confirm(String message);
-
-    public abstract String inputDialog(String message);
-
-     *  ERROR_MESSAGE = 0
-     *  INFORMATION_MESSAGE = 1
-     *  WARNING_MESSAGE = 2
-     *  QUESTION_MESSAGE = 3
-public abstract void outputDialog(String message, int type);
-
-public abstract double askDouble(String message);
-
-public abstract float askFloat(String message);
-
-public abstract int askInt(String message);
-
-public abstract String askString(String message);
-
-public abstract double readDouble();
-
-public abstract float readFloat();
-
-public abstract int readInt();
-
-public abstract String readString();
-
-public abstract char readChar();
-
-public abstract void logLine(String message);
-
-public abstract void log(String message);
-
-public abstract void printChar(char c);
-
-public abstract void printDouble(double d);
-
-public abstract void printFloat(float f);
-
-public abstract void printInt(int i);
-
-public abstract void printString(String l);
-
-
-public abstract void sleep(int milliseconds);
-
-public abstract double time();
-
-public abstract int stdIn(byte[] buffer, int length);
-
-public abstract int seekFile(int fileDescriptor, int offset, int whence);
-
-public abstract void stdOut(byte[] buffer);
-
-public abstract void stdErr(byte[] buffer);
- */
-
+/** The kind of message dialog syscall 55 asks for; any other value of a1 asks for a plain message. */
 export enum DialogType {
+    PLAIN_MESSAGE = -1,
     ERROR_MESSAGE = 0,
     INFORMATION_MESSAGE = 1,
     WARNING_MESSAGE = 2,
@@ -147,39 +139,87 @@ export enum ConfirmResult {
     CANCEL = 2
 }
 
+/**
+ * The handlers a program's syscalls reach the outside world through, each as its arguments and its
+ * answer. The syscalls own each service's semantics, as RARS defines them: they format what they
+ * print and parse what they read, so a handler only moves text and bytes. Bytes cross as plain
+ * arrays of numbers from 0 to 255.
+ */
 export type HandlerMap = {
+    /**
+     * Syscall 1024: open a file, with `flags` 0 to read and 1 to write, `append` set for flags 9. The
+     * path is the program's string decoded from UTF-8. Answer with the new file descriptor, or -1
+     * when the file cannot be opened.
+     */
     openFile: {in: [filename: string, flags: number, append: boolean], out: number}
+    /** Syscall 57: close a file descriptor that `openFile` returned. */
     closeFile: {in: [fileDescriptor: number], out: void}
-    writeFile: {in: [fileDescriptor: number, buffer: number[]], out: void}
-    readFile: {in: [fileDescriptor: number, destination: number[], length: number], out: [readOrEof: number, buffer: number[]]}
+    /**
+     * Syscall 64 on a file descriptor that `openFile` returned: write the bytes. Answer with the
+     * number of bytes written, or -1 when the write failed; the program receives it in a0.
+     */
+    writeFile: {in: [fileDescriptor: number, buffer: number[]], out: number}
+    /**
+     * Syscall 63 on a file descriptor that `openFile` returned: read at most `length` bytes. Answer
+     * with `[count, bytes]`, where a count of 0 is the end of the file and -1 a failed read.
+     */
+    readFile: {in: [fileDescriptor: number, length: number], out: [count: number, buffer: number[]]}
+    /**
+     * Syscall 50: a Yes, No and Cancel question. Cancel reaches the program as 2. Every dialog's
+     * message is the program's string at a0, decoded from UTF-8.
+     */
     confirm: {in: [message: string], out: ConfirmResult}
-    inputDialog: {in: [message: string], out: string}
+    /**
+     * Syscalls 51 to 54: ask for a line of text. Answer with the text, or null when the user cancels,
+     * which the program receives as status -2. The syscall parses the text itself, as RARS does;
+     * 54 stores it as UTF-8, measuring the buffer in bytes.
+     */
+    inputDialog: {in: [message: string], out: string | null}
+    /** Syscalls 55, 56 and 58 to 60: show a message. The program waits until the handler settles. */
     outputDialog: {in: [message: string, type: DialogType], out: void}
-    askDouble: {in: [message: string], out: number}
-    askFloat: {in: [message: string], out: number}
-    askInt: {in: [message: string], out: number}
-    askString: {in: [message: string], out: string}
-    readDouble: {in: [], out: number}
-    readFloat: {in: [], out: number}
-    readInt: {in: [], out: number}
+    /**
+     * Syscall 5: the line typed. The syscall trims it and parses it as Java's `Integer.parseInt`
+     * does; anything else stops the program with "invalid integer input (syscall 5)".
+     */
+    readInt: {in: [], out: string}
+    /**
+     * Syscall 6: the line typed. The syscall trims it and parses it as Java's `Float.parseFloat`
+     * does; anything else stops the program with "invalid float input (syscall 6)".
+     */
+    readFloat: {in: [], out: string}
+    /**
+     * Syscall 7: the line typed. The syscall trims it and parses it as Java's `Double.parseDouble`
+     * does; anything else stops the program with "invalid double input (syscall 7)".
+     */
+    readDouble: {in: [], out: string}
+    /**
+     * Syscall 8: the line typed. The syscall stores it as UTF-8, as RARS does: at most the buffer's
+     * length less one characters, then at most that many bytes of them, so a character can be cut
+     * where the buffer ends.
+     */
     readString: {in: [], out: string}
+    /**
+     * Syscall 12: the character typed, Enter as `"\n"`. The syscall takes the first UTF-16 unit of the
+     * answer, as RARS does (`é` reads as 233, an emoji as its high surrogate); an empty answer stops
+     * the program with "invalid char input (syscall 12)".
+     */
     readChar: {in: [], out: string}
-    logLine: {in: [message: string], out: void}
-    log: {in: [message: string], out: void}
-    printChar: {in: [c: string], out: void}
-    printDouble: {in: [d: number], out: void}
-    printFloat: {in: [f: number], out: void}
-    printInt: {in: [i: number], out: void}
-    printString: {in: [l: string], out: void}
+    /**
+     * Program output: the text every print syscall (1 to 4, 11 and 34 to 36) formats, exactly as
+     * RARS prints it on Java 21, so a float prints `1.0` and `1.0E-5`. Print string (4) decodes the
+     * string from UTF-8; print char (11) prints the character numbered by the low byte of a0.
+     */
+    printString: {in: [text: string], out: void}
     /**
      * Syscall 32: the program asks to be suspended for this many milliseconds. Return a promise
      * that settles when the wait is over to suspend the simulation without blocking the host.
      */
     sleep: {in: [milliseconds: number], out: void}
     /**
-     * Syscall 30: the program time in milliseconds, split by the syscall into a0 (low word) and
-     * a1 (high word). Answer with `Date.now()` for a live run, or with a virtual clock for a
-     * scripted one, so that elapsed-time output stays reproducible.
+     * Syscall 30, and every instruction that reads the `time` CSR (or `timeh`, its upper half on
+     * RV32): the program time in milliseconds. The syscall splits it into a0 (low word) and a1 (high
+     * word). Answer with `Date.now()` for a live run, or with a virtual clock for a scripted one, so
+     * that elapsed-time output stays reproducible.
      */
     time: {in: [], out: number}
     /**
@@ -187,14 +227,27 @@ export type HandlerMap = {
      * line or else one new line, at most `length` of them, as `[count, bytes]`. A count of 0 is end
      * of input and -1 a failed read. Return a promise to wait for the user.
      */
-    stdIn: {in: [buffer: number[], length: number], out: [count: number, buffer: number[]]}
+    stdIn: {in: [length: number], out: [count: number, buffer: number[]]}
     /**
      * Syscall 62 (lseek): move an open file's position. `whence` is 0 from the start, 1 from the
      * current position, 2 from the end. Answer with the new position, or -1 when the seek fails.
      */
     seekFile: {in: [fileDescriptor: number, offset: number, whence: number], out: number}
+    /** Syscall 64 on descriptor 1: the bytes written to standard output. */
     stdOut: {in: [buffer: number[]], out: void}
+    /** Syscall 64 on descriptor 2: the bytes written to standard error. */
     stdErr: {in: [buffer: number[]], out: void}
+    /**
+     * Syscalls 41 to 44, on the first use of a generator the program has not seeded with service
+     * 40: the seed it starts from, as `new java.util.Random(seed)` takes it, a whole number from 0
+     * to 2^48 - 1 (every seed a Java long can hold scrambles to the state one of these does).
+     * `index` is the generator's number from a0. Answer with host randomness for a live run, or
+     * with a fixed seed for a scripted one, so that a Testcase gets the same numbers every time.
+     *
+     * Optional: without it a generator starts from host randomness, as in RARS. The generators
+     * implement `java.util.Random` exactly, so a seeded program prints the numbers RARS prints.
+     */
+    randomSeed: {in: [index: number], out: number}
 }
 
 /**
@@ -390,13 +443,27 @@ export enum BackStepAction {
      * A whole Poke: every value one `beginPoke`/`endPoke` transaction wrote, restored together.
      * A Poke is a single back step, so it takes one slot of the undo size whatever it wrote.
      */
-    POKE
+    POKE,
+    /**
+     * An exit service (10 or 93): undoing it leaves the program running on the ecall again.
+     * `param1` is 1 if the program had already exited (never, as nothing runs after an exit),
+     * `oldValue` the exit code it replaced and `newValue` the code the exit set.
+     */
+    EXIT_RESTORE,
+    /**
+     * A random service (40 to 44) advanced or reseeded generator `param1`: undoing it puts the
+     * generator back, so that stepping the service again draws the same number. The generator's
+     * state is the simulator's own, so `param2`, `oldValue` and `newValue` are 0.
+     */
+    RANDOM_STREAM_RESTORE
 }
 
 /**
  * Represents a back step in the simulation undo stack.
  */
 export interface JsBackStep {
+    /** Opaque decimal identity, unique across Undo, initialize and reassembly in this module. */
+    readonly serial: string;
     /**
      * The action performed (e.g., register write, memory write).
      */
@@ -429,8 +496,10 @@ export interface JsBackStep {
      *   was made, in the low order bits.
      * - `PC_RESTORE`: the address the restore puts back - the same value as `param1`, which is
      *   where this action has always kept it, its `param2` being unused and 0.
+     * - `EXIT_RESTORE`: the exit code the exit replaced.
      * - `'0'` for `CONTROL_AND_STATUS_COUNTERS_DECREMENT`, `DO_NOTHING` and `POKE`, which replace
      *   no single value; a Poke reports both sides of everything it wrote through its own `writes`.
+     *   Also for `RANDOM_STREAM_RESTORE`, whose generator state is the simulator's own.
      */
     readonly oldValue: string;
 
@@ -441,9 +510,9 @@ export interface JsBackStep {
      *
      * `CONTROL_AND_STATUS_REGISTER_BACKDOOR` is the simulator sampling the wall clock into `time`
      * rather than a program writing a register, but it is a write all the same and reports the
-     * millisecond reading it stored. `'0'` for `CONTROL_AND_STATUS_COUNTERS_DECREMENT` and
-     * `DO_NOTHING`, which write no value of their own, and for `POKE`, whose `writes` carry both
-     * sides already.
+     * millisecond reading it stored. `EXIT_RESTORE` reports the exit code the exit set. `'0'` for
+     * `CONTROL_AND_STATUS_COUNTERS_DECREMENT` and `DO_NOTHING`, which write no value of their own,
+     * for `POKE`, whose `writes` carry both sides already, and for `RANDOM_STREAM_RESTORE`.
      */
     readonly newValue: string;
 
@@ -510,6 +579,8 @@ export type JsUndoGroup = JsInstructionUndoGroup | JsPokeUndoGroup
  * overwrote, and the `cycle`/`instret` decrement every instruction pushes on top of them.
  */
 export type JsInstructionUndoGroup = {
+    /** Opaque decimal identity, unique across Undo, initialize and reassembly in this module. */
+    readonly serial: string;
     readonly kind: 'instruction'
     readonly pc: number
     /** The instruction's back steps, newest first. */
@@ -525,6 +596,8 @@ export type JsInstructionUndoGroup = {
  * alone.
  */
 export type JsPokeUndoGroup = {
+    /** Opaque decimal identity, unique across Undo, initialize and reassembly in this module. */
+    readonly serial: string;
     readonly kind: 'poke'
     readonly pc: -1
     /** The single back step the Poke is: one slot of the history, whatever the Poke wrote. */
@@ -615,13 +688,20 @@ type HandlerName = keyof HandlerMap
  * user, reading a file, awaiting a worker) without blocking the event loop. If the promise
  * rejects, the pending `step`/`simulate*` call rejects too.
  */
+type HandlerFn<K extends HandlerName> = (...args: HandlerMap[K]['in']) => HandlerMap[K]['out'] | Promise<HandlerMap[K]['out']>
+
+/** The handlers a host may leave out: the simulator then does what RARS does on its own. */
+export type OptionalHandlerName = 'randomSeed'
+
 export type HandlerMapFns = {
-    [K in HandlerName]: (...args: HandlerMap[K]['in']) => HandlerMap[K]['out'] | Promise<HandlerMap[K]['out']>
+    [K in Exclude<HandlerName, OptionalHandlerName>]: HandlerFn<K>
+} & {
+    [K in OptionalHandlerName]?: HandlerFn<K>
 }
 
 export function registerHandlers(riscv: JsRiscV, handlers: HandlerMapFns) {
     for (const [name, handler] of Object.entries(handlers)) {
-        riscv.registerHandler(name as HandlerName, handler as (...args: HandlerMap[HandlerName]['in']) => HandlerMap[HandlerName]['out'] | Promise<HandlerMap[HandlerName]['out']>)
+        riscv.registerHandler(name as HandlerName, handler as HandlerFn<HandlerName>)
     }
 }
 
@@ -641,30 +721,45 @@ export interface JsRiscV {
     assemble(): RISCVAssembleResult;
 
     /**
-     * Initializes the simulator.
+     * Initializes the simulator for a new run: the registers, the program counter, and the state
+     * of the run - not exited, exit code 0, no stop reason, and the random generators forgotten, so
+     * that each starts from a new seed on its first use. Assembling leaves the run state alone.
      * @param startAtMain If true, starts execution at the 'main' label. Otherwise, starts at the first instruction.
      */
     initialize(startAtMain: boolean): void;
 
-
-
     /**
-     * Gets the current stop reason.
+     * Why the last run call stopped: `NONE` when none has since the program was initialized, and
+     * `EXCEPTION` after one rejected with a `RuntimeError`. Undo does not change it; read
+     * `terminated` for whether the program can run.
      */
     getStopReason(): StopReason;
 
     /**
+     * The program's exit code: exit2's (93) operand once it has run, 0 otherwise - after exit (10),
+     * after running off the end, while the program runs. `initialize` resets it to 0, and undoing
+     * the exit puts back the code before it.
+     */
+    readonly exitCode: number;
+
+    /**
      * Executes a single instruction.
      *
-     * The promise settles on a microtask unless an IO handler returned a promise, in which case
-     * it settles once that handler and the rest of the instruction have finished.
+     * Resolves to why it stopped: `MAX_STEPS` normally, `NORMAL_TERMINATION` for an exit,
+     * `CLIFF_TERMINATION` when the instruction was the program's last (or there was none to run),
+     * `BREAKPOINT` for an `ebreak`. A program that has exited runs nothing more and resolves to
+     * `NORMAL_TERMINATION` again. Rejects with a `RuntimeError` when the program fails. The
+     * promise settles on a microtask unless an IO handler returned a promise, in which case it
+     * settles once that handler and the rest of the instruction have finished.
      */
     step(): Promise<StopReason>;
 
 
 
     /**
-     * Sets the size of the undo stack, must be called before assembling the program.
+     * Sets the maximum raw restore slots, before assembly. A Poke uses one slot; instructions
+     * use one slot per restore. Oldest instructions are evicted whole. An instruction larger
+     * than the capacity is discarded whole. Zero retains no history; negative sizes throw.
      * @param size
      */
     setUndoSize(size: number): void;
@@ -723,27 +818,40 @@ export interface JsRiscV {
     getAddressOfLabel(label: string): number
 
     /**
+     * Where the program's heap, and so the first block sbrk (9) hands out, starts. RARS's heap base,
+     * 0x10040000, unless the program is a `gnu-compiler-v1` Build whose static data (`.data`,
+     * `.rodata`, `.bss`, common symbols) reaches past it: then the heap starts at the first 4 KiB page
+     * after static data, where ld and a kernel put the break. A RARS-dialect program keeps the heap
+     * base whatever its size, as RARS does. Requires successful assembly; `initialize` empties the
+     * heap again.
+     */
+    getHeapStart(): number
+
+    /**
      * Sets whether the undo feature is enabled.
      * @param enabled True to enable the undo feature, false to disable it.
      */
     setUndoEnabled(enabled: boolean): void;
 
     /**
-     * Simulates until the stop condition is met. it might be a breakpoint, exception, etc...
+     * Simulates until the program stops: an exit, running off the end, an `ebreak`, or a failure,
+     * which rejects with a `RuntimeError`.
      */
     simulate(): Promise<StopReason>;
 
     /**
      * Simulates the program for a limited number of instructions.
      * @param limit The maximum number of instructions to execute.
-     * @returns A promise resolving to the reason the simulation stopped.
+     * @returns A promise resolving to the reason the simulation stopped (`MAX_STEPS` when the
+     * limit did), rejecting with a `RuntimeError` when the program fails.
      */
     simulateWithLimit(limit: number): Promise<StopReason>;
 
     /**
      * Simulates the program until a breakpoint is reached.
      * @param breakpoints An array of memory addresses where the simulation should pause.
-     * @returns A promise resolving to the reason the simulation stopped.
+     * @returns A promise resolving to the reason the simulation stopped, rejecting with a
+     * `RuntimeError` when the program fails.
      */
     simulateWithBreakpoints(breakpoints: number[]): Promise<StopReason>;
 
@@ -751,7 +859,8 @@ export interface JsRiscV {
      * Simulates the program with both breakpoints and a limit.
      * @param breakpoints An array of memory addresses where the simulation should pause.
      * @param limit The maximum number of instructions to execute.
-     * @returns A promise resolving to the reason the simulation stopped.
+     * @returns A promise resolving to the reason the simulation stopped, rejecting with a
+     * `RuntimeError` when the program fails.
      */
     simulateWithBreakpointsAndLimit(breakpoints: number[], limit: number): Promise<StopReason>;
 
@@ -770,11 +879,12 @@ export interface JsRiscV {
     getRegisterValueLong(register: RegisterName): string;
 
     /**
-     * Registers a handler function for a specific event or condition.
+     * Registers a handler function for a specific event or condition. Handlers are shared by every
+     * `JsRiscV` instance. An optional handler (`randomSeed`) is removed by registering `undefined`.
      * @param name The name of the event or condition.
      * @param handler The handler function to be called when the event occurs. The function signature depends on the event name.
      */
-    registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void;
+    registerHandler<T extends HandlerName>(name: T, handler: HandlerFn<T> | (T extends OptionalHandlerName ? undefined : never)): void;
 
     /**
      * Gets the current value of the stack pointer.
@@ -878,6 +988,15 @@ export interface JsRiscV {
      * carries what it changed, with the old and the new value of each write.
      */
     getUndoGroups(): JsUndoGroup[];
+    /**
+     * The current dynamic instruction's serial, or null outside execution. Read it inside a host
+     * handler to journal an effect under the same identity its eventual Undo group carries. It
+     * remains stable while an async handler waits. Failures and exits have identities too.
+     * Serials are allocated even with Undo disabled; such runs retain no groups. Treat the decimal
+     * string as opaque (or compare with BigInt), never convert it to a JS number. Serials never
+     * rewind or alias after Undo, initialize or reassembly; initialize clears retained history.
+     */
+    getCurrentInstructionSerial(): string | null;
     /**
      * The newest `max` entries of `getUndoGroups`, read from the top of the history without
      * grouping the rest of it: what a panel showing the latest steps of a large history wants.
@@ -997,9 +1116,10 @@ export interface JsRiscV {
 
     /**
      * Gets the next statement to be executed.
-     * @returns The next `JsProgramStatement`.
+     * @returns The next `JsProgramStatement`, or null once the program has ended (`terminated`):
+     * after an exit the statement that follows the ecall is not one the program will run.
      */
-    getNextStatement(): JsProgramStatement;
+    getNextStatement(): JsProgramStatement | null;
 
     /**
      * Sets the value of a register. Outside a Poke the write is direct: it records no undo step.
@@ -1011,10 +1131,12 @@ export interface JsRiscV {
     setRegisterValue(register: RegisterName, high: number, low: number): void;
 
     /**
-     * Checks if the simulation has terminated.
-     * @returns True if the simulation has terminated, false otherwise.
+     * Whether the program has ended, read from its state rather than from the last run call, so
+     * that it is right after `undo()` too: an exit service has run, or there is no statement at
+     * the program counter because execution ran off the end. It is true as soon as the last
+     * instruction has run. A runtime failure does not set it: the run call's rejection reports it.
      */
-    terminated: boolean;
+    readonly terminated: boolean;
 }
 
 

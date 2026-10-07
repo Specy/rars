@@ -8,6 +8,8 @@ import app.specy.rars.riscv.hardware.ControlAndStatusRegisterFile;
 import app.specy.rars.riscv.hardware.InterruptController;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.riscv.io.RISCVIOError;
+import app.specy.rars.riscv.io.RISCVIOFailure;
 import app.specy.rars.util.Binary;
 import app.specy.rars.util.SystemIO;
 
@@ -59,9 +61,10 @@ public class Simulator extends Observable {
      */
     public enum Reason {
         BREAKPOINT,
+        /** A runtime failure ended the program; simulate() throws it rather than returning this. */
         EXCEPTION,
         MAX_STEPS,         // includes step mode (where maxSteps is 1)
-        NORMAL_TERMINATION,
+        NORMAL_TERMINATION, // an exit service
         CLIFF_TERMINATION, // run off bottom of program
         PAUSE,
         STOP
@@ -112,6 +115,19 @@ public class Simulator extends Observable {
     }
     public boolean hasTerminated() {
         return simulatorThread == null || simulatorThread.done;
+    }
+
+    /**
+     * Whether there is no statement at {@code address}, so that a program whose counter reaches it
+     * has run off the end. An address that cannot be fetched at all is not that: running it
+     * reports the bad program counter as an exception.
+     */
+    public static boolean noStatementAt(int address) {
+        try {
+            return Globals.memory.getStatementNoNotify(address) == null;
+        } catch (AddressErrorException e) {
+            return false;
+        }
     }
 
 
@@ -277,6 +293,7 @@ public class Simulator extends Observable {
                 return true;
             } else {
                 // If we don't have an error handler or exceptions are disabled terminate the process
+                se.setAddress(pc);
                 this.pe = se;
                 stopExecution(true, Reason.EXCEPTION);
                 return false;
@@ -319,6 +336,7 @@ public class Simulator extends Observable {
             } else {
                 // If we don't have an error handler or exceptions are disabled terminate the process
                 this.pe = new SimulationException("Interrupt handler was not supplied, but interrupt enable was high");
+                this.pe.setAddress(pc);
                 stopExecution(true, Reason.EXCEPTION);
                 return false;
             }
@@ -328,23 +346,18 @@ public class Simulator extends Observable {
          * Implements Runnable
          */
 
-        /** How many instructions may pass between samples of the host clock for the time counter. */
-        private static final int TIME_SAMPLE_INSTRUCTIONS = 64;
-
         public void run() {
-            // the time counter, resolved once instead of by name on every sample; cycle and
-            // instret are counted inside ControlAndStatusRegisterFile rather than written here
-            final Register timeRegister = ControlAndStatusRegisterFile.getRegister("time");
-            // and the three interrupt state counters read on every instruction
+            // The three interrupt state registers read on every instruction, resolved once instead
+            // of by name. Cycle and instret are counted inside ControlAndStatusRegisterFile, and
+            // the time counter is read from the program time when an instruction reads it.
             final Register uipRegister = ControlAndStatusRegisterFile.getRegister("uip");
             final Register uieRegister = ControlAndStatusRegisterFile.getRegister("uie");
             final Register ustatusRegister = ControlAndStatusRegisterFile.getRegister("ustatus");
-            int timeSampleCountdown = 1;
             // Backstepping cannot be switched on or off while a run is in flight, so the flag is
             // resolved once rather than walked down from Globals to the program's BackStepper on
             // every instruction.
             final boolean backStepping = Globals.getSettings().getBackSteppingEnabled();
-            final BackStepper backStepper = backStepping ? Globals.program.getBackStepper() : null;
+            final BackStepper backStepper = Globals.program.getBackStepper();
 
             if (breakPoints == null || breakPoints.length == 0) {
                 breakPoints = null;
@@ -443,6 +456,13 @@ public class Simulator extends Observable {
                     if (maxSteps > 0) {
                         steps++;
                         if (steps > maxSteps) {
+                            // The instruction may have been the program's last: then the call that
+                            // ran it is the one that ran off the end, rather than the next one, so
+                            // the reason agrees with the program counter, which has nothing left.
+                            if (noStatementAt(RegisterFile.getProgramCounter())) {
+                                stopExecution(true, Reason.CLIFF_TERMINATION);
+                                return;
+                            }
                             stopExecution(false, Reason.MAX_STEPS);
                             return;
                         }
@@ -461,6 +481,7 @@ public class Simulator extends Observable {
                             tmp = new SimulationException("Instruction load alignment error", SimulationException.INSTRUCTION_ADDR_MISALIGNED);
                         }
                         if (!InterruptController.registerSynchronousTrap(tmp, pc)) {
+                            tmp.setAddress(pc);
                             this.pe = tmp;
                             ControlAndStatusRegisterFile.updateRegister("uepc", pc);
                             stopExecution(true, Reason.EXCEPTION);
@@ -474,6 +495,7 @@ public class Simulator extends Observable {
                         return;
                     }
 
+                    backStepper.beginInstruction(pc, backStepping);
                     try {
                         BasicInstruction instruction = (BasicInstruction) statement.getInstruction();
                         if (instruction == null) {
@@ -513,6 +535,7 @@ public class Simulator extends Observable {
                             }
                         } else {
                             this.constructReturnReason = Reason.EXCEPTION;
+                            e.setAddress(pc);
                             this.pe = e;
                         }
                         // TODO: remove access to constructReturnReason
@@ -520,27 +543,34 @@ public class Simulator extends Observable {
                         return;
                     } catch (SimulationException se) {
                         if (InterruptController.registerSynchronousTrap(se, pc)) {
+                            // Trap setup is an effect of this faulting instruction, so its CSR
+                            // restores must share this dynamic identity before it is closed.
+                            if (!handleTrap(InterruptController.claimTrap(), pc)) return;
                             continue;
                         } else {
+                            se.setAddress(pc);
                             this.pe = se;
                             stopExecution(true, Reason.EXCEPTION);
                             return;
                         }
+                    } catch (RISCVIOFailure | RISCVIOError hostFailure) {
+                        // The host failed to answer a service. That is not the program's doing, so
+                        // it never reaches the program's trap handler: the run ends with it.
+                        this.pe = SimulationException.duringExecution(statement, pc,
+                                SimulationException.Kind.HANDLER, hostFailure);
+                        stopExecution(true, Reason.EXCEPTION);
+                        return;
+                    } catch (RuntimeException | Error internalFailure) {
+                        this.pe = SimulationException.duringExecution(statement, pc,
+                                SimulationException.Kind.INTERNAL, internalFailure);
+                        stopExecution(true, Reason.EXCEPTION);
+                        return;
                     }
+                    // Counter restores belong to the same dynamic instruction as its writes.
+                    ControlAndStatusRegisterFile.incrementCounters(backStepping, pc);
+
                 } finally {
-
-                }
-
-                // Update cycle(h) and instret(h). One undo entry covers both, which is also what
-                // keeps the shipped undo history covering as many instructions as it says.
-                ControlAndStatusRegisterFile.incrementCounters(backStepping, pc);
-                // The time counter reports milliseconds, and reading the host clock allocates both
-                // a date and a boxed long, so it is sampled rather than read on every instruction.
-                // A sample this often is still far finer than the millisecond it reports.
-                if (--timeSampleCountdown <= 0) {
-                    timeSampleCountdown = TIME_SAMPLE_INSTRUCTIONS;
-                    ControlAndStatusRegisterFile.updateRegisterBackdoor(timeRegister,
-                            System.currentTimeMillis(), pc);
+                    if (backStepper.getCurrentInstructionSerial() != 0) backStepper.endInstruction();
                 }
 
                 //     Return if we've reached a breakpoint.

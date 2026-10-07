@@ -25,6 +25,7 @@ public class SyscallProperties extends ConfigMap {
     public static final String PrintIntHex = "PrintIntHex";
     public static final String PrintIntBinary = "PrintIntBinary";
     public static final String PrintIntUnsigned = "PrintIntUnsigned";
+    public static final String RandSeed = "RandSeed";
     public static final String RandInt = "RandInt";
     public static final String RandIntRange = "RandIntRange";
     public static final String RandFloat = "RandFloat";
@@ -70,6 +71,7 @@ public class SyscallProperties extends ConfigMap {
         put(PrintIntHex, "34");
         put(PrintIntBinary, "35");
         put(PrintIntUnsigned, "36");
+        put(RandSeed, "40");
         put(RandInt, "41");
         put(RandIntRange, "42");
         put(RandFloat, "43");

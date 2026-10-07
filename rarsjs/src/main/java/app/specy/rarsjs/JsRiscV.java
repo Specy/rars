@@ -116,6 +116,13 @@ public class JsRiscV {
     @JSExport
     public int getAddressOfLabel(String label) { return main.getAddressOfLabel(label); }
 
+    /**
+     * Where the program's heap, and so the first block sbrk hands out, starts: 0x10040000, or the
+     * first page after static data in a GNU-profile program whose static data reaches past it.
+     */
+    @JSExport
+    public int getHeapStart() { return main.getHeapStart(); }
+
     @JSExport
     public JsRiscVTokenizedLine[] getTokenizedLines() {
         List<TokenList> tokenizedLines = this.main.getTokens();
@@ -137,7 +144,12 @@ public class JsRiscV {
 
     @JSExport
     public void initialize(boolean startAtMain) {
+        if (executingInstructions > 0 || openPoke != null) {
+            throw new IllegalStateException("Cannot initialize during an instruction or poke");
+        }
         this.main.initialize(startAtMain);
+        openPoke = null;
+        pokeRecords.clear();
     }
 
 
@@ -208,7 +220,14 @@ public class JsRiscV {
                 try {
                     result = body.run();
                 } catch (Throwable t) {
-                    reject.accept(JSExceptions.getJSException(t));
+                    JSObject error;
+                    try {
+                        error = rejection(t);
+                    } catch (Throwable unreported) {
+                        // Never leave the promise unsettled: the plain error still says what failed.
+                        error = JSExceptions.getJSException(t);
+                    }
+                    reject.accept(error);
                     return;
                 } finally {
                     // Exactly once, on every path out of the body, so that a failed step cannot
@@ -227,6 +246,17 @@ public class JsRiscV {
         }
     }
 
+    /**
+     * A runtime failure of the program crosses as a typed RuntimeError ({@link JsRuntimeError});
+     * anything else, such as a call on a program that did not assemble, as the error it is.
+     */
+    private static JSObject rejection(Throwable failure) {
+        if (failure instanceof SimulationException && ((SimulationException) failure).error() != null) {
+            return JsRuntimeError.of((SimulationException) failure);
+        }
+        return JSExceptions.getJSException(failure);
+    }
+
     @JSExport
     public JSPromise<JSNumber> step() {
         return run(() -> this.main.step().ordinal());
@@ -234,9 +264,16 @@ public class JsRiscV {
 
     @JSExport
     public int getStopReason() {
-        // Null until a simulation has run; StopReason.NONE on the TS side.
+        // Null until a run call has stopped since initialize; StopReason.NONE on the TS side.
         Simulator.Reason reason = this.main.getStopReason();
         return reason == null ? -1 : reason.ordinal();
+    }
+
+    /** The exit code: exit2's operand once it has run, 0 otherwise. */
+    @JSProperty
+    @JSExport
+    public int getExitCode() {
+        return this.main.getExitCode();
     }
 
     @JSExport
@@ -463,7 +500,7 @@ public class JsRiscV {
 
     /**
      * The raw back step stack, newest first: one element per recorded step. An instruction occupies
-     * one to three of them, a poke exactly one, whatever it wrote - the element with `isPoke` set,
+     * one or more of them, a poke exactly one, whatever it wrote - the element with `isPoke` set,
      * which is what tells a poke apart from a host write made before anything ran, since both carry
      * pc -1. Use getUndoGroups() to read the history the way undo() pops it.
      *
@@ -504,9 +541,9 @@ public class JsRiscV {
             if (stack[start].isPoke()) {
                 int group = stack[start].getPokeGroup();
                 livePokeGroups.add(group);
-                groups.add(JsUndoGroup.poke(POKE_PC, steps, writesOfPoke(group)));
+                groups.add(JsUndoGroup.poke(Long.toString(stack[start].getSerial()), POKE_PC, steps, writesOfPoke(group)));
             } else {
-                groups.add(JsUndoGroup.instruction(stack[start].getPc(), steps));
+                groups.add(JsUndoGroup.instruction(Long.toString(stack[start].getSerial()), stack[start].getPc(), steps));
             }
             start = end;
         }
@@ -551,13 +588,21 @@ public class JsRiscV {
             for (int i = start; i < end; i++) steps.set(i - start, JsBackStep.of(stack.fromTop(i)));
             BackStepper.BackStep first = stack.fromTop(start);
             groups.add(first.isPoke()
-                    ? JsUndoGroup.poke(POKE_PC, steps, writesOfPoke(first.getPokeGroup()))
-                    : JsUndoGroup.instruction(first.getPc(), steps));
+                    ? JsUndoGroup.poke(Long.toString(first.getSerial()), POKE_PC, steps, writesOfPoke(first.getPokeGroup()))
+                    : JsUndoGroup.instruction(Long.toString(first.getSerial()), first.getPc(), steps));
             start = end;
         }
         JSArray<JSObject> result = JSArray.create(groups.size());
         for (int i = 0; i < groups.size(); i++) result.set(i, groups.get(i));
         return result;
+    }
+
+    /** The dynamic instruction currently executing, or null outside an instruction. */
+    @JSExport
+    public String getCurrentInstructionSerial() {
+        if (!this.main.isAssembled()) return null;
+        long serial = this.main.getProgram().getBackStepper().getCurrentInstructionSerial();
+        return serial == 0 ? null : Long.toString(serial);
     }
 
     /** How many entries undo() can still pop: executed instructions and pokes, as getUndoGroups() counts them. */
@@ -890,22 +935,31 @@ public class JsRiscV {
 
     @JSExport
     public void setUndoSize(int size) {
+        if (size < 0) throw new IllegalArgumentException("Undo size must be nonnegative");
         Globals.maximumBacksteps = size;
     }
 
     @JSExport
     void setUndoEnabled(boolean enabled) {
+        if (executingInstructions > 0 || openPoke != null) {
+            throw new IllegalStateException("Cannot change recording during an instruction or poke");
+        }
         this.main.getProgram().getBackStepper().setEnabled(enabled);
     }
 
     @JSExport
     public void undo() {
+        if (executingInstructions > 0 || openPoke != null) {
+            throw new IllegalStateException("Cannot undo during an instruction or poke");
+        }
         this.main.getProgram().getBackStepper().backStep();
     }
 
+    /** The statement the program runs next, or null once it has ended: after an exit, or off the end. */
     @JSExport
     public JsProgramStatement getNextStatement() {
-        return new JsProgramStatement(this.main.getStatementAtAddress(this.getProgramCounter()));
+        ProgramStatement statement = this.main.getNextStatement();
+        return statement == null ? null : new JsProgramStatement(statement);
     }
 
     @JSExport

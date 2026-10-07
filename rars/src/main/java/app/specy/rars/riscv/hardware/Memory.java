@@ -337,6 +337,16 @@ public class Memory extends Observable {
         System.gc(); // call garbage collector on any Table memory just deallocated.
     }
 
+    /**
+     * Empties the heap, so that the next allocation starts at {@code start}: the heap base, or the
+     * first page after static data for a program whose static data reaches past the heap base.
+     *
+     * @param start the address the heap starts at, word-aligned
+     */
+    public void resetHeap(int start) {
+        heapAddress = start;
+    }
+
     // TODO: add some heap managment so programs can malloc and free
     /**
      * Returns the next available word-aligned heap address.  There is no recycling and

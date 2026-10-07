@@ -5,6 +5,7 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.JavaNumberText;
 
 
 
@@ -77,7 +78,7 @@ public class SyscallInputDialogInt extends AbstractSyscall {
             RegisterFile.updateRegister("a1", -3);
         } else {
             try {
-                int i = Integer.parseInt(inputValue);
+                int i = JavaNumberText.parseInt(inputValue);
 
                 // Successful parse of valid input data
                 RegisterFile.updateRegister("a0", i);  // set to the data read

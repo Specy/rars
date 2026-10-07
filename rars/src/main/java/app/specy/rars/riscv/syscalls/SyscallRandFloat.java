@@ -3,8 +3,8 @@ package app.specy.rars.riscv.syscalls;
 import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
+import app.specy.rars.riscv.hardware.RegisterFile;
 
-import java.util.Random;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -41,7 +41,6 @@ public class SyscallRandFloat extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) {
-        Random stream = RandomStreams.get("a0");
-        FloatingPointRegisterFile.setRegisterToFloat(10, stream.nextFloat());// TODO: make this a string method fa0
+        FloatingPointRegisterFile.setRegisterToFloat(10, RandomStreams.forDraw(RegisterFile.getValue("a0")).nextFloat());
     }
 }

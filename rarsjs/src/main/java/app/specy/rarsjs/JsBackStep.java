@@ -19,7 +19,7 @@ public final class JsBackStep {
     static JSObject of(BackStepper.BackStep backStep) {
         return create(backStep.getAction(), backStep.getPc(), backStep.getParam1(),
                 (int) backStep.getParam2(), Long.toString(backStep.getOldValue()),
-                Long.toString(backStep.getNewValue()), backStep.isPoke());
+                Long.toString(backStep.getNewValue()), backStep.isPoke(), Long.toString(backStep.getSerial()));
     }
 
     /*
@@ -32,9 +32,9 @@ public final class JsBackStep {
      * `getRegistersValuesLong` already use. `param1` and `param2` are unchanged, down to
      * PC_RESTORE's param2 of 0.
      */
-    @JSBody(params = { "action", "pc", "param1", "param2", "oldValue", "newValue", "isPoke" },
+    @JSBody(params = { "action", "pc", "param1", "param2", "oldValue", "newValue", "isPoke", "serial" },
             script = "return { action: action, pc: pc, param1: param1, param2: param2,"
-                    + " oldValue: oldValue, newValue: newValue, isPoke: isPoke };")
+                    + " oldValue: oldValue, newValue: newValue, isPoke: isPoke, serial: serial };")
     private static native JSObject create(int action, int pc, int param1, int param2, String oldValue,
-            String newValue, boolean isPoke);
+            String newValue, boolean isPoke, String serial);
 }

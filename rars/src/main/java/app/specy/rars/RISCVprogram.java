@@ -2,6 +2,7 @@ package app.specy.rars;
 
 import app.specy.rars.assembler.*;
 import app.specy.rars.riscv.fs.RISCVFileSystem;
+import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.BackStepper;
 import app.specy.rars.simulator.Simulator;
@@ -64,6 +65,17 @@ public class RISCVprogram {
     private AssemblerProfile assemblerProfile = AssemblerProfile.RARS;
     private RuntimeLibrary runtimeLibrary;
     private String entrySymbol;
+    /** Where the assembled program's heap starts; see {@link #getHeapStart()}. */
+    private int heapStart = Memory.heapBaseAddress;
+
+    /**
+     * Where the assembled program's heap, and so the first block sbrk hands out, starts: RARS's heap
+     * base (0x10040000), or in a GNU-profile program whose static data reaches past it, the first
+     * page after its static data.
+     */
+    public int getHeapStart() {
+        return heapStart;
+    }
 
     public ProgramStatement getMachineStatement(int address) {
         return machineListPCMap.get(address);
@@ -311,12 +323,15 @@ public class RISCVprogram {
         if (assemblerProfile == AssemblerProfile.GNU_COMPILER_V1) {
             GnuAssembler gnu = new GnuAssembler(List.of(this), runtimeLibrary, entrySymbol);
             this.machineList = gnu.assemble();
+            this.heapStart = gnu.heapStart();
             errors = gnu.getErrors();
             if (warningsAreErrors && errors.warningsOccurred()) throw new AssemblyException(errors);
         } else {
             asm.setRuntimeLibrary(runtimeLibrary);
             this.machineList = asm.assemble(programsToAssemble, extendedAssemblerEnabled, warningsAreErrors);
             errors = asm.getErrorList();
+            // RARS's layout: the heap starts at its base, whatever the program's data.
+            this.heapStart = Memory.heapBaseAddress;
         }
         this.machineListPCMap = new HashMap<Integer, ProgramStatement>();
         for(ProgramStatement ps : machineList) {

@@ -262,12 +262,22 @@ public class InstructionSet {
             if (!is_writing) {
                 SystemIO.flush(true);
             }
-            service.simulate(statement);
+            try {
+                service.simulate(statement);
+            } catch (SimulationException failure) {
+                // A service refusing its arguments or its input; an exit has no error and passes.
+                if (failure.error() != null) {
+                    failure.setKind(SimulationException.Kind.SYSCALL);
+                }
+                throw failure;
+            }
             return;
         }
-        throw new SimulationException(statement,
+        SimulationException unknown = new SimulationException(statement,
                 "invalid or unimplemented syscall service: " +
                         number + " ", SimulationException.ENVIRONMENT_CALL);
+        unknown.setKind(SimulationException.Kind.SYSCALL);
+        throw unknown;
     }
 
     /*

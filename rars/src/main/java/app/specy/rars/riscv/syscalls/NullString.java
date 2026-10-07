@@ -6,8 +6,9 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
 
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import app.specy.rars.util.Utf8;
+
+import java.io.ByteArrayOutputStream;
 
 /*
 Copyright (c) 2003-2017,  Pete Sanderson,Benjamin Landers and Kenneth Vollmar
@@ -39,7 +40,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
- * Small helper class to wrap getting null terminated strings from memory
+ * Small helper class to wrap getting null terminated strings from memory. The bytes are decoded
+ * from UTF-8 the way Java 21 decodes them, malformed sequences included.
  */
 public class NullString {
     /**
@@ -58,25 +60,18 @@ public class NullString {
      * @throws ExitingException if it hits a #AddressErrorException
      */
     public static String get(ProgramStatement statement, String reg) throws ExitingException {
-        int byteAddress = RegisterFile.getValue(reg);
-        ArrayList<Byte> utf8BytesList = new ArrayList<>(); // Need an array to hold bytes
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try {
-            utf8BytesList.add((byte) Globals.memory.getByte(byteAddress));
-            while (utf8BytesList.get(utf8BytesList.size() - 1) != 0) // until null terminator
-            {
+            int byteAddress = RegisterFile.getValue(reg);
+            int value = Globals.memory.getByte(byteAddress);
+            while (value != 0) { // until null terminator
+                bytes.write(value);
                 byteAddress++;
-                utf8BytesList.add((byte) Globals.memory.getByte(byteAddress));
+                value = Globals.memory.getByte(byteAddress);
             }
         } catch (AddressErrorException e) {
             throw new ExitingException(statement, e);
         }
-
-        int size = utf8BytesList.size() - 1;    //size - 1 so we dont include the null terminator in the utf8Bytes array
-        byte[] utf8Bytes = new byte[size];  
-        for (int i = 0; i < size; i++){ 
-            utf8Bytes[i] = utf8BytesList.get(i);
-        }
-
-        return new String(utf8Bytes, StandardCharsets.UTF_8);
+        return Utf8.decode(bytes.toByteArray());
     }
 }

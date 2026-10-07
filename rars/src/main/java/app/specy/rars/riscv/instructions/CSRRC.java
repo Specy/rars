@@ -42,7 +42,7 @@ public class CSRRC extends BasicInstruction {
     public void simulate(ProgramStatement statement) throws SimulationException {
         int[] operands = statement.getOperands();
         try {
-            long csr = ControlAndStatusRegisterFile.getValueLong(operands[1]);
+            long csr = ControlAndStatusRegisterFile.getValueForInstruction(operands[1]);
             if (operands[2] != 0) {
                 if(ControlAndStatusRegisterFile.clearRegister(operands[1], RegisterFile.getValueLong(operands[2]))){
                     throw new SimulationException(statement, "Attempt to write to read-only CSR", SimulationException.ILLEGAL_INSTRUCTION);

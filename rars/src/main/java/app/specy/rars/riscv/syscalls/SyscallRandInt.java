@@ -4,7 +4,6 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.RegisterFile;
 
-import java.util.Random;
 
 /*
 Copyright (c) 2003-2008,  Pete Sanderson and Kenneth Vollmar
@@ -40,8 +39,7 @@ public class SyscallRandInt extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) {
-        Random stream = RandomStreams.get("a0");
-        RegisterFile.updateRegister("a0", stream.nextInt());
+        RegisterFile.updateRegister("a0", RandomStreams.forDraw(RegisterFile.getValue("a0")).nextInt());
     }
 }
 

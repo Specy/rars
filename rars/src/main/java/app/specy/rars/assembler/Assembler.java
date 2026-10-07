@@ -7,9 +7,10 @@ import app.specy.rars.riscv.Instruction;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.Memory;
 import app.specy.rars.util.Binary;
+import app.specy.rars.util.JavaNumberText;
 import app.specy.rars.util.SystemIO;
+import app.specy.rars.util.Utf8;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 
@@ -1127,7 +1128,9 @@ public class Assembler {
                 || TokenTypes.isFloatingTokenType(token.getType())) {
 
             try {
-                value = Double.parseDouble(token.getValue());
+                // As Java 21 reads it, correctly rounded; .float rounds that double to a float, as
+                // RARS does.
+                value = JavaNumberText.parseDouble(token.getValue());
             } catch (NumberFormatException nfe) {
                 errors.add(new ErrorMessage(token.getSourceProgram(), token.getSourceLine(),
                         token.getStartPos(), "\"" + token.getValue()
@@ -1162,6 +1165,10 @@ public class Assembler {
     // Use directive argument to distinguish between ASCII and ASCIZ. The
     // latter stores a terminating null byte. Can handle a list of one or more
     // strings on a single line.
+    //
+    // A string is stored as UTF-8 by code point. RARS encodes it one UTF-16 unit at a time, which
+    // splits a surrogate pair, so a character outside the Basic Multilingual Plane (an emoji)
+    // was stored as "??"; the whole string is encoded at once instead, as Java encodes a String.
     private void storeStrings(TokenList tokens, Directives direct, ErrorList errors) {
         Token token;
         // Correctly handles case where this is a "directive continuation" line.
@@ -1176,90 +1183,106 @@ public class Assembler {
                         token.getStartPos(), "\"" + token.getValue()
                         + "\" is not a valid character string"));
             } else {
-                String quote = token.getValue();
-                char theChar;
-                for (int j = 1; j < quote.length() - 1; j++) {
-                    theChar = quote.charAt(j);
-                    if (theChar == '\\') {
-                        theChar = quote.charAt(++j);
-                        switch (theChar) {
-                            case 'n':
-                                theChar = '\n';
-                                break;
-                            case 't':
-                                theChar = '\t';
-                                break;
-                            case 'r':
-                                theChar = '\r';
-                                break;
-                            case '\\':
-                                theChar = '\\';
-                                break;
-                            case '\'':
-                                theChar = '\'';
-                                break;
-                            case '"':
-                                theChar = '"';
-                                break;
-                            case 'b':
-                                theChar = '\b';
-                                break;
-                            case 'f':
-                                theChar = '\f';
-                                break;
-                            case '0':
-                                theChar = '\0';
-                                break;
-                            case 'u':
-                                String codePoint = "";
-                                try{
-                                    codePoint = quote.substring(j+1, j+5); //get the UTF-8 codepoint following the unicode escape sequence
-                                    theChar = Character.toChars(Integer.parseInt(codePoint, 16))[0]; //converts the codepoint to single character
-                                } catch(StringIndexOutOfBoundsException e){
-                                    String invalidCodePoint = quote.substring(j+1);
-                                    errors.add(new ErrorMessage(token.getSourceProgram(), token
-                                        .getSourceLine(), token.getStartPos(), "unicode escape \"\\u" +
-                                            invalidCodePoint + "\" is incomplete. Only escapes with 4 digits are valid."));
-                                } catch(NumberFormatException e){
-                                    errors.add(new ErrorMessage(token.getSourceProgram(), token
-                                            .getSourceLine(), token.getStartPos(), "illegal unicode escape: \"\\u" + codePoint + "\""));
-                                }
-                                j = j + 4; //skip past the codepoint for next iteration
-                                break;
-
-                            // Not implemented: \ n = octal character (n is number)
-                            // \ x n = hex character (n is number)
-                            // There are of course no spaces in these escape
-                            // codes...
-                        }
-                    }
-                    byte[] bytesOfChar = String.valueOf(theChar).getBytes(StandardCharsets.UTF_8);
-                    try {
-                        for (byte b : bytesOfChar) {
-                            Globals.memory.set(this.dataAddress.get(), b,
-                                    DataTypes.CHAR_SIZE);
-                            this.dataAddress.increment(DataTypes.CHAR_SIZE);
-                        }
-                    } catch (AddressErrorException e) {
-                        errors.add(new ErrorMessage(token.getSourceProgram(), token
-                                .getSourceLine(), token.getStartPos(), "\""
-                                + this.dataAddress.get() + "\" is not a valid data segment address"));
-                    }
-                    
+                for (byte value : Utf8.encode(unescapeString(token, errors))) {
+                    if (!storeStringByte(token, value, errors)) break;
                 }
                 if (direct == Directives.ASCIZ || direct == Directives.STRING) {
-                    try {
-                        Globals.memory.set(this.dataAddress.get(), 0, DataTypes.CHAR_SIZE);
-                    } catch (AddressErrorException e) {
-                        errors.add(new ErrorMessage(token.getSourceProgram(), token
-                                .getSourceLine(), token.getStartPos(), "\""
-                                + this.dataAddress.get() + "\" is not a valid data segment address"));
-                    }
-                    this.dataAddress.increment(DataTypes.CHAR_SIZE);
+                    storeStringByte(token, 0, errors);
                 }
             }
         }
     } // storeStrings()
+
+    // //////////////////////////////////////////////////////////////////////////////////
+    // The characters a quoted string stands for, with its escapes decoded. A unicode escape,
+    // a backslash, u and four hexadecimal digits, names one UTF-16 unit, and two that make a
+    // surrogate pair stand for one character, as in Java.
+    private String unescapeString(Token token, ErrorList errors) {
+        String quote = token.getValue();
+        int contentEnd = quote.length() - 1;
+        StringBuilder text = new StringBuilder(contentEnd);
+        char theChar;
+        for (int j = 1; j < contentEnd; j++) {
+            theChar = quote.charAt(j);
+            if (theChar == '\\') {
+                theChar = quote.charAt(++j);
+                switch (theChar) {
+                    case 'n':
+                        theChar = '\n';
+                        break;
+                    case 't':
+                        theChar = '\t';
+                        break;
+                    case 'r':
+                        theChar = '\r';
+                        break;
+                    case '\\':
+                        theChar = '\\';
+                        break;
+                    case '\'':
+                        theChar = '\'';
+                        break;
+                    case '"':
+                        theChar = '"';
+                        break;
+                    case 'b':
+                        theChar = '\b';
+                        break;
+                    case 'f':
+                        theChar = '\f';
+                        break;
+                    case '0':
+                        theChar = '\0';
+                        break;
+                    case 'u':
+                        if (j + 5 > contentEnd) {
+                            errors.add(new ErrorMessage(token.getSourceProgram(), token
+                                    .getSourceLine(), token.getStartPos(), "unicode escape \"\\u" +
+                                    quote.substring(j + 1, contentEnd) + "\" is incomplete. Only escapes with 4 digits are valid."));
+                            j = contentEnd;
+                            break;
+                        }
+                        String codePoint = quote.substring(j + 1, j + 5); // the four digits following the unicode escape sequence
+                        try {
+                            // Integer.parseInt as Java 21 reads it. A sign is part of what it
+                            // accepts, and a negative unit, which Character.toChars refused with
+                            // an exception that stopped the assembler, is an illegal escape.
+                            int value = JavaNumberText.parseInt(codePoint, 16);
+                            if (value < 0) {
+                                throw new NumberFormatException(codePoint);
+                            }
+                            theChar = (char) value;
+                        } catch (NumberFormatException e) {
+                            errors.add(new ErrorMessage(token.getSourceProgram(), token
+                                    .getSourceLine(), token.getStartPos(), "illegal unicode escape: \"\\u" + codePoint + "\""));
+                        }
+                        j = j + 4; //skip past the codepoint for next iteration
+                        break;
+
+                    // Not implemented: \ n = octal character (n is number)
+                    // \ x n = hex character (n is number)
+                    // There are of course no spaces in these escape
+                    // codes...
+                }
+            }
+            text.append(theChar);
+        }
+        return text.toString();
+    }
+
+    /** Stores one byte of a string, reporting an address the data segment does not have. */
+    private boolean storeStringByte(Token token, int value, ErrorList errors) {
+        try {
+            Globals.memory.set(this.dataAddress.get(), value, DataTypes.CHAR_SIZE);
+        } catch (AddressErrorException e) {
+            errors.add(new ErrorMessage(token.getSourceProgram(), token
+                    .getSourceLine(), token.getStartPos(), "\""
+                    + this.dataAddress.get() + "\" is not a valid data segment address"));
+            return false;
+        }
+        this.dataAddress.increment(DataTypes.CHAR_SIZE);
+        return true;
+    }
 
     // //////////////////////////////////////////////////////////////////////////////////
     // Simply check to see if we are in data segment. Generate error if not.

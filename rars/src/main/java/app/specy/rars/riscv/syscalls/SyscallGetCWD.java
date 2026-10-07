@@ -6,8 +6,8 @@ import app.specy.rars.ProgramStatement;
 import app.specy.rars.riscv.AbstractSyscall;
 import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.RegisterFile;
+import app.specy.rars.util.Utf8;
 
-import java.nio.charset.StandardCharsets;
 
 /*
 Copyright (c) 20017,  Benjamin Landers
@@ -37,6 +37,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 public class SyscallGetCWD extends AbstractSyscall {
+    /**
+     * The working directory a program sees: the root its relative and absolute file paths both
+     * resolve against. RARS answers the JVM's {@code user.dir}, which a browser does not have.
+     */
+    public static final String WORKING_DIRECTORY = "/";
+
     public SyscallGetCWD() {
         super("GetCWD", "Writes the path of the current working directory into a buffer",
                 "a0 = the buffer to write into <br>a1 = the length of the buffer",
@@ -44,11 +50,11 @@ public class SyscallGetCWD extends AbstractSyscall {
     }
 
     public void simulate(ProgramStatement statement) throws ExitingException {
-        String path = System.getProperty("user.dir");
+        String path = WORKING_DIRECTORY;
         int buf = RegisterFile.getValue("a0");
         int length = RegisterFile.getValue("a1");
 
-        byte[] utf8BytesList = path.getBytes(StandardCharsets.UTF_8);
+        byte[] utf8BytesList = Utf8.encode(path);
         if(length < utf8BytesList.length+1){
             // This should be -34 (ERANGE) for compatibility with spike, but until other syscalls are ready with compatable
             // error codes, lets keep internal consitency.

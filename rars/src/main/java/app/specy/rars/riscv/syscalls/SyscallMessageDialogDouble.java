@@ -8,6 +8,7 @@ import app.specy.rars.riscv.hardware.AddressErrorException;
 import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.riscv.io.RISCVIO;
+import app.specy.rars.util.JavaNumberText;
 
 
 
@@ -60,24 +61,11 @@ public class SyscallMessageDialogDouble extends AbstractSyscall {
      * System call to display a message to user.
      */
     public void simulate(ProgramStatement statement) throws ExitingException {
-        // TODO: maybe refactor this, other null strings are handled in a central place now
-        String message = new String(); // = "";
-        int byteAddress = RegisterFile.getValue("a0");
-        char ch[] = {' '}; // Need an array to convert to String
-        try {
-            ch[0] = (char) Globals.memory.getByte(byteAddress);
-            while (ch[0] != 0) // only uses single location ch[0]
-            {
-                message = message.concat(new String(ch)); // parameter to String constructor is a char[] array
-                byteAddress++;
-                ch[0] = (char) Globals.memory.getByte(byteAddress);
-            }
-        } catch (AddressErrorException e) {
-            throw new ExitingException(statement, e);
-        }
+        // As UTF-8, as the other dialogs read their message; RARS reads this one a byte per character.
+        String message = NullString.get(statement);
 
         this.io.outputDialog(
-                message + Double.longBitsToDouble(FloatingPointRegisterFile.getValueLong(10)),
+                message + JavaNumberText.toString(Double.longBitsToDouble(FloatingPointRegisterFile.getValueLong(10))),
                 1);
     }
 }
