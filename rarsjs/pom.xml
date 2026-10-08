@@ -13,7 +13,7 @@
 
 
     <properties>
-        <java.version>11</java.version>
+        <java.version>15</java.version>
         <teavm.version>0.15.0</teavm.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
@@ -56,7 +56,7 @@
 
     <build>
         <plugins>
-            <!-- Configure Java compiler to use Java 8 syntax  -->
+            <!-- Configure the Java compiler for the wrapper sources. -->
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
@@ -110,14 +110,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>15</source>
-                    <target>15</target>
-                </configuration>
             </plugin>
         </plugins>
     </build>
