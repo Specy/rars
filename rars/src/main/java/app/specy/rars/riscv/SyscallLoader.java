@@ -100,6 +100,7 @@ public class SyscallLoader {
         add(new SyscallReadInt());
         add(new SyscallReadString());
         add(new SyscallSbrk());
+        add(new SyscallRuntimeSbrk());
         add(new SyscallSleep());
         add(new SyscallTime());
 

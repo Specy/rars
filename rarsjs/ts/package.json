@@ -14,7 +14,7 @@
   "description": "The RARS risc-v interpreter in JS",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
-    "test": "node test/smoke.mjs && node test/instruction-undo.mjs && node test/instruction-identity.mjs && node test/gnu-compiler.mjs && node test/library-link.mjs && node test/io-handlers.mjs && node test/java-numbers.mjs && node test/random.mjs && node test/termination.mjs && node test/assembler-literals.mjs && node test/text.mjs",
+    "test": "node test/smoke.mjs && node test/instruction-undo.mjs && node test/instruction-identity.mjs && node test/gnu-compiler.mjs && node test/library-link.mjs && node test/io-handlers.mjs && node test/runtime-extensions.mjs && node test/java-numbers.mjs && node test/random.mjs && node test/termination.mjs && node test/assembler-literals.mjs && node test/text.mjs",
     "build:all": "cd ../../ && mvn clean install && cd rarsjs/ts && npm run build",
     "run": "npx tsx ./src/index.ts"
   },

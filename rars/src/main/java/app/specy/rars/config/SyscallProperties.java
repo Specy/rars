@@ -58,6 +58,7 @@ public class SyscallProperties extends ConfigMap {
         put(ReadDouble, "7");
         put(ReadString, "8");
         put(Sbrk, "9");
+        put("RuntimeSbrk", "1100");
         put(Exit, "10");
         put(PrintChar, "11");
         put(ReadChar, "12");

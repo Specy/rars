@@ -361,14 +361,11 @@ public class Memory extends Observable {
         if (numBytes < 0) {
             throw new IllegalArgumentException("request (" + numBytes + ") is negative heap amount");
         }
-        int newHeapAddress = heapAddress + numBytes;
-        if (newHeapAddress % 4 != 0) {
-            newHeapAddress = newHeapAddress + (4 - newHeapAddress % 4); // next higher multiple of 4
-        }
-        if (newHeapAddress >= dataSegmentLimitAddress) {
+        long next = (Integer.toUnsignedLong(heapAddress) + numBytes + 3) & ~3L;
+        if (next >= Integer.toUnsignedLong(dataSegmentLimitAddress)) {
             throw new IllegalArgumentException("request (" + numBytes + ") exceeds available heap storage");
         }
-        heapAddress = newHeapAddress;
+        heapAddress = (int)next;
         return result;
     }
 
