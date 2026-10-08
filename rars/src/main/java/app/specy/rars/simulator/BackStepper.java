@@ -90,7 +90,8 @@ public class BackStepper {
          * forgets the generator when param2 is RandomStreams.ABSENT. The state is the simulator's
          * own, so the getters report neither half.
          */
-        RANDOM_STREAM_RESTORE
+        RANDOM_STREAM_RESTORE,
+        HEAP_RESTORE
     }
 
     // Flag to mark BackStep object as prepresenting specific situation: user manipulates
@@ -281,6 +282,8 @@ public class BackStepper {
     /** Carries out one recorded restore. One back step holds one; a poke entry holds its writes. */
     private static void applyRestore(Action action, int param1, long param2) throws AddressErrorException {
         switch (action) {
+            case HEAP_RESTORE:
+                app.specy.rars.riscv.hardware.Memory.heapAddress = param1; break;
             case MEMORY_RESTORE_RAW_WORD:
                 Globals.memory.setRawWord(param1, (int) param2);
                 break;
@@ -623,6 +626,8 @@ public class BackStepper {
      * {@code low} are its two halves, or {@code high} is RandomStreams.ABSENT when the generator
      * does not exist yet.
      */
+    public void addHeapRestore(int old) { backSteps.push(Action.HEAP_RESTORE, pc(), old); }
+
     public void addRandomStreamRestore(int index, int high, int low) {
         backSteps.push(Action.RANDOM_STREAM_RESTORE, pc(), index, high, low, 0);
     }

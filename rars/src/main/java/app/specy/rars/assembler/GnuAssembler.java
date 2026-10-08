@@ -266,6 +266,7 @@ public final class GnuAssembler {
 
     /** Parses every unit, links them and writes the program to memory. Returns the executable statements by address. */
     public ArrayList<ProgramStatement> assemble() throws AssemblyException {
+        MemoryLayoutFacts.clear();
         for (Unit unit : units) unit.parseAll();
         fail();
         Set<String> required = new LinkedHashSet<>();
@@ -314,6 +315,7 @@ public final class GnuAssembler {
                 if (path == null || !loaded.add(path)) continue;
                 try {
                     Unit unit = new Unit(library.load(path), units.size());
+                    unit.fromLibrary = true;
                     units.add(unit);
                     unit.parseAll();
                     pulled = true;
@@ -381,6 +383,11 @@ public final class GnuAssembler {
         ArrayList<ProgramStatement> machine = new ArrayList<>();
         for (Fragment gap : textGaps) gap.section.unit.attempt(gap.line, () -> gap.section.unit.emit(gap, machine));
         for (Unit unit : units) unit.emitAll(machine);
+        for (Unit unit : units) for (Section section : unit.sections.values()) {
+            if (!section.discarded()) MemoryLayoutFacts.item((int)section.base, section.size,
+                section.executable() ? 0 : section.zeroed() || section.family == COMMON ? 2 : 1,
+                section.name, section.alignment);
+        }
         fail();
         machine.sort(Comparator.comparingInt(ProgramStatement::getAddress));
         for (ProgramStatement statement : machine) statement.getSourceProgram().getParsedList().add(statement);
@@ -485,6 +492,7 @@ public final class GnuAssembler {
     private final class Unit {
         final RISCVprogram program;
         final int index;
+        boolean fromLibrary;
         final LinkedHashMap<String, Section> sections = new LinkedHashMap<>();
         /** The most recently declared section of each name, for re-entry without flags. */
         final Map<String, Section> sectionsByName = new HashMap<>();
@@ -644,6 +652,7 @@ public final class GnuAssembler {
                 if (value.number.signum() >= 0 && value.number.bitLength() <= 32) {
                     Token token = new Token(TokenTypes.IDENTIFIER, symbol.name, program, symbol.line, 1);
                     program.getLocalSymbolTable().addSymbol(token, value.number.intValue(), value.section != null && !value.section.executable(), errors);
+                    MemoryLayoutFacts.symbol(symbol.name, value.number.intValue(), value.section != null && !value.section.executable(), fromLibrary, program.getSourceLineList().get(symbol.line - 1).getSourcePath());
                 }
             });
             for (String name : declared) if (!weak.contains(name)) attempt(1, () -> resolve(name, 1, current, 0, false, new HashSet<>()));

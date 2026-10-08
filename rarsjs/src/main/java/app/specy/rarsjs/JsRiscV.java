@@ -120,6 +120,20 @@ public class JsRiscV {
      * Where the program's heap, and so the first block sbrk hands out, starts: 0x10040000, or the
      * first page after static data in a GNU-profile program whose static data reaches past it.
      */
+    /** Flat layout tuples: address, length, kind, section index, alignment. */
+    @JSExport public int[] getLayoutItems() { return app.specy.rars.assembler.MemoryLayoutFacts.items(); }
+    @JSExport public String[] getSectionNames() { return app.specy.rars.assembler.MemoryLayoutFacts.sections(); }
+    @JSExport public String[] getSymbolFiles() { return app.specy.rars.assembler.MemoryLayoutFacts.files(); }
+    @JSExport public String[] getSymbolNames() { return app.specy.rars.assembler.MemoryLayoutFacts.names(); }
+    /** Symbol tuples: address, data flag, library owner flag. */
+    @JSExport public int[] getSymbolValues() { return app.specy.rars.assembler.MemoryLayoutFacts.symbols(); }
+    @JSExport public int getHeapBreak() { return app.specy.rars.riscv.hardware.Memory.heapAddress; }
+    @JSExport public int getStackTop() { return app.specy.rars.assembler.MemoryLayoutFacts.stackTop; }
+    /** The half-open start and end of the text segment, which holds statements. */
+    @JSExport public int[] getTextSegments() {
+        return new int[] { app.specy.rars.riscv.hardware.Memory.textBaseAddress, app.specy.rars.riscv.hardware.Memory.textLimitAddress };
+    }
+
     @JSExport
     public int getHeapStart() { return main.getHeapStart(); }
 
@@ -148,6 +162,7 @@ public class JsRiscV {
             throw new IllegalStateException("Cannot initialize during an instruction or poke");
         }
         this.main.initialize(startAtMain);
+        app.specy.rars.assembler.MemoryLayoutFacts.resetStack(RegisterFile.getValue(2));
         openPoke = null;
         pokeRecords.clear();
     }
@@ -805,7 +820,7 @@ public class JsRiscV {
         for (int i = 0; i < length; i++) {
             // No notification: the host inspecting memory is not the program reading it, and a
             // memory viewer must not make a memory-mapped register consume its pending input.
-            memory[i] = Globals.memory.getByteNoNotify(address + i);
+            memory[i] = Globals.memory.getByteForHost(address + i);
         }
         return memory;
     }

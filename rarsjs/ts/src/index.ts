@@ -455,7 +455,9 @@ export enum BackStepAction {
      * generator back, so that stepping the service again draws the same number. The generator's
      * state is the simulator's own, so `param2`, `oldValue` and `newValue` are 0.
      */
-    RANDOM_STREAM_RESTORE
+    RANDOM_STREAM_RESTORE,
+    /** Internal heap and stack extent restores; no displayed mutation. */
+    HEAP_RESTORE,
 }
 
 /**
@@ -817,6 +819,21 @@ export interface JsRiscV {
     /** Address of a defined label/alias, or -1 if absent. Requires successful assembly. */
     getAddressOfLabel(label: string): number
 
+    /** Tuples of address, length, kind (code=0/data=1/reserved=2), section index, alignment. */
+    getLayoutItems(): Int32Array
+    getSectionNames(): string[]
+    getSymbolFiles(): string[]
+    getSymbolNames(): string[]
+    /** Tuples of address, data flag, library owner flag. */
+    getSymbolValues(): Int32Array
+    getHeapBreak(): number
+    getStackTop(): number
+    /**
+     * Half-open start and end pairs of the text segment, which hold statements rather than bytes:
+     * `readMemoryBytes` reads them as encodings, `setMemoryBytes` cannot write them.
+     */
+    getTextSegments(): Int32Array
+
     /**
      * Where the program's heap, and so the first block sbrk (9) hands out, starts. RARS's heap base,
      * 0x10040000, unless the program is a `gnu-compiler-v1` Build whose static data (`.data`,
@@ -1038,6 +1055,9 @@ export interface JsRiscV {
      *
      * Reading through this method notifies no memory observer: inspecting memory from the host is
      * not the program reading it, so a memory viewer never drives a memory-mapped register.
+     * The text segment reads as the encodings of the statements it holds, little endian, with
+     * zero where no statement is; the program's own loads from text still fault unless
+     * self-modifying code is enabled.
      * @param address The starting memory address.
      * @param length The number of bytes to read.
      * @returns An array of bytes read from memory.

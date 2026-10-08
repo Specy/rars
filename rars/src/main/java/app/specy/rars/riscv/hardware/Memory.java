@@ -365,6 +365,7 @@ public class Memory extends Observable {
         if (next >= Integer.toUnsignedLong(dataSegmentLimitAddress)) {
             throw new IllegalArgumentException("request (" + numBytes + ") exceeds available heap storage");
         }
+        Globals.program.getBackStepper().addHeapRestore(heapAddress);
         heapAddress = (int)next;
         return result;
     }
@@ -912,6 +913,29 @@ public class Memory extends Observable {
      **/
     public int getByteNoNotify(int address) throws AddressErrorException {
         return get(address, 1, false);
+    }
+
+    /**
+     * Reads a byte the way a host inspecting memory sees it. The text segment holds statements
+     * rather than bytes, so a byte there is cut from its statement's encoding, little endian as
+     * every word is stored, and a word holding no statement reads as zero. That is for inspection
+     * only: the program's own loads from text still go through {@link #get(int, int)} and its
+     * self-modifying-code setting. Anywhere else this is {@link #getByteNoNotify(int)}.
+     *
+     * @param address Address of Memory byte to be read.
+     * @return Value stored at that address.  Only low order 8 bits used.
+     **/
+    public int getByteForHost(int address) throws AddressErrorException {
+        if (!inTextSegment(address)) {
+            return getByteNoNotify(address);
+        }
+        ProgramStatement statement = readProgramStatement(address & ~3, textBaseAddress, textBlockTable, false);
+        if (statement == null) {
+            return 0;
+        }
+        int index = address & 3;
+        int shift = 8 * (byteOrder == LITTLE_ENDIAN ? index : 3 - index);
+        return (statement.getBinaryStatement() >>> shift) & 0xff;
     }
 
     ////////////////////////////////////////////////////////////////////////////////

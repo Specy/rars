@@ -382,7 +382,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getConditionFlags(): number[]`: Gets the 8 condition flags (if applicable, typically related to floating-point or custom extensions).
 * `registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void`: Registers a handler function for a specific event (e.g., syscalls). See `HandlerName`, `HandlerMap` and [IO handlers](#io-handlers) for details.
 * `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
-* `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values. Notifies no memory observer: inspecting memory from the host is not the program reading it.
+* `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values. Notifies no memory observer: inspecting memory from the host is not the program reading it. Text reads as the encodings of the statements it holds, little endian, and as zero where no statement is; the program's own loads from text still fault unless self-modifying code is enabled.
 * `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`, the way the program does: write observers are notified and, while undo is enabled, an undo step is recorded per byte.
 * `setPeripheralWord(address: number, value: number): void`: Writes one word-aligned word as a peripheral would, notifying no observer and recording no undo step. See [memory observers](#memory-observers).
 * `addMemoryWriteObserver(startAddress: number, endAddress: number, handler): number`: Observes every write in an address range. See [memory observers](#memory-observers).
@@ -446,3 +446,28 @@ instructions still expose a serial inside handlers. Match and retain host frames
 `getUndoGroups`/`getUndoGroupsRange`, never by PC; drop frames whose groups are no longer retained.
 
 `initialize` is rejected while an instruction or Poke is active.
+
+### Memory layout and bounds
+
+After a successful `assemble()`, `getLayoutItems()` returns an `Int32Array` of
+five-field tuples: address, byte length, kind (`0` code, `1` data, `2` reserved),
+index into `getSectionNames()`, and byte alignment. Convert addresses to unsigned
+32-bit values in JavaScript (`address >>> 0`). Items describe the assembled program,
+including the kept sections of loaded library members; zero-length items are omitted.
+
+`getSymbolNames()` and `getSymbolFiles()` are parallel string arrays.
+`getSymbolValues()` has three integers per name: address, data flag, library flag.
+A library flag of `1` includes locals of data-only library members. The source file
+identifies an included file, rather than only its enclosing compilation unit.
+
+After `initialize()`, `getHeapStart()` and `getHeapBreak()` bound the current heap.
+An allocation's previous break is recorded with its instruction, so Undo restores
+it and executing that instruction again makes the same allocation.
+
+`getStackTop()` reports the initialized `sp`, fixed until the next initialization.
+The current `sp` is still available in the register file. Tracking a changing top
+inside RARS's instruction loop measured about 6% slower, so this Core retains the
+initial-stack convention.
+
+`getTextSegments()` returns half-open start and end pairs for the text segment, which hold
+statements rather than bytes: `readMemoryBytes` reads them, `setMemoryBytes` cannot write them.

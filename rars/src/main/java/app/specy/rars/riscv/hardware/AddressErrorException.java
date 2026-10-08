@@ -49,7 +49,7 @@ public class AddressErrorException extends Exception {
      **/
 
     public AddressErrorException(String message, int exceptType, int addr) {
-        super(message + Binary.intToHexString(addr));
+        super(message.stripTrailing() + " " + Binary.intToHexString(addr));
         address = addr;
         type = exceptType;
     }
