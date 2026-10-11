@@ -77,6 +77,37 @@ const serial = group => {
     assert.ok(serial(top(core)) > preAssembly, 'reassembly does not alias identity')
 }
 
+// Storage grows through several boundaries, including a limit that is not a power of two.
+// Growth, wraparound, and replay must keep the complete restores of every retained instruction.
+for (const capacity of [130, 200_000]) {
+    const core = make(text("addi t0, t0, 1\nj main"), capacity)
+    const snapshot = () => ({
+        pc: core.programCounter,
+        registers: Array.from(core.getRegistersValuesLong()),
+    })
+    const before = []
+    assert.equal(core.getUndoStack().length, 0)
+    for (let i = 0; i < 350; i++) {
+        before.push(snapshot())
+        await core.step()
+    }
+    assert.ok(core.getUndoStack().length <= capacity)
+    const depth = core.getUndoDepth()
+    assert.ok(depth > 0)
+    if (capacity === 200_000) assert.equal(depth, 350)
+    for (let i = 0; i < depth; i++) {
+        core.undo()
+        assert.deepEqual(snapshot(), before[before.length - 1 - i])
+    }
+    assert.equal(core.getUndoDepth(), 0)
+    // Fill the same storage again after undo has emptied it.
+    await core.simulateWithLimit(140)
+    assert.ok(core.getUndoDepth() > 0)
+    assert.ok(core.getUndoStack().length <= capacity)
+    core.initialize(true)
+    assert.equal(core.getUndoDepth(), 0)
+}
+
 // Handler identity is exactly its final group, and survives asynchronous waits.
 {
     const core = make(printSource)
