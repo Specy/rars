@@ -334,6 +334,41 @@ segment, which static data and the heap share, ends at 0x10400000.
 `getHeapStart()` reports where the heap starts, and `initialize` empties it again. An allocator
 built on sbrk follows the heap wherever it starts.
 
+## Program arguments
+
+`setProgramArguments(argv)` gives the program an `argv`, `argv[0]` (its name) included, which every
+later `initialize` stores before the first instruction, until it is set again:
+
+```typescript
+riscvSimulator.setProgramArguments(['./main', 'hello', 'two words']);
+riscvSimulator.initialize(true);
+// a0 = 3 (argc), a1 = 0x7fffffd4 (argv; 0x7fffffc0 on RV64), sp = 0x7fffeffc as always
+```
+
+Everything goes in the gap RARS leaves between the initial stack pointer and the stack base, so
+`sp` starts where it always does:
+
+* the strings, UTF-8 and each ending in a NUL, `argv[0]` first, end at the stack base
+  (0x7ffffffc): `./main` at 0x7fffffe5, `hello` at 0x7fffffec, `two words` at 0x7ffffff2;
+* right below them, the NULL-terminated array of pointers to them: four bytes each on RV32,
+  aligned to four (here 0x7fffffd4 to 0x7fffffe3), and eight on RV64, aligned to eight (0x7fffffc0
+  to 0x7fffffdf), by the width `initialize` runs under; any byte between it and the strings is zero;
+* `a0` is argc and `a1` the array's address.
+
+The writes are not steps of the undo history, so undoing back to the start keeps them, and the
+next `initialize` stores them again over anything the program wrote on them. They must end at
+least 16 bytes above the initial stack pointer: 4,080 bytes in all (`RISCV.programArgumentsSpace()`)
+for the strings and the array together. `setProgramArguments` throws an `Error` with a sentence for
+the person, and keeps the `argv` it had, for more than 1,024 words after `argv[0]`, a word with a
+NUL, or more than fits at the current width (`Arguments take 4,084 bytes with the program name and
+argv; RISC-V programs have 4,080 bytes for them`); `RISCV.checkProgramArguments(argv, is64Bit?)`
+throws the same without a program, at the width it names or else the one `setIs64Bit` set. An empty array stores nothing, as before
+`setProgramArguments` is called: `a0` and `a1` start at 0.
+
+RARS's own command-line arguments (`ProgramArgumentList`, which this does not use) put argc and
+the pointers below the stack pointer and lower it, always with four-byte pointers, and start
+`argv` at the first argument.
+
 ## API
 
 ### `RISCV` Static Class
@@ -348,6 +383,8 @@ Provides static methods to initialize and create simulator instances.
   Returns an array of objects, each describing a supported RISC-V instruction (name, example, description, tokens).
 * `RISCV.setIs64Bit(is64Bit: boolean): void`
   Sets the simulator to operate in 32-bit or 64-bit mode. This affects the instruction set.
+* `RISCV.checkProgramArguments(argv: string[], is64Bit?: boolean): void` and `RISCV.programArgumentsSpace(): number`
+  Throw the error `setProgramArguments` would throw for `argv` at a width (the current one by default), and give the bytes argv may take. See [Program arguments](#program-arguments).
 
 ### `JsRiscv` Interface
 
@@ -364,7 +401,8 @@ This interface provides methods to control and interact with a RISC-V simulator 
 #### Methods
 
 * `assemble(): RISCVAssembleResult`: Assembles the program. Returns an object containing a report, error list, and an `hasErrors` flag.
-* `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction.
+* `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction. It stores the `argv` `setProgramArguments` set, if any.
+* `setProgramArguments(argv: string[]): void`: The `argv` every later `initialize` stores above the stack. See [Program arguments](#program-arguments).
 * `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
 * `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
 * `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the
