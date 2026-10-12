@@ -10,6 +10,7 @@ import app.specy.rars.riscv.hardware.FloatingPointRegisterFile;
 import app.specy.rars.riscv.hardware.Register;
 import app.specy.rars.riscv.hardware.RegisterFile;
 import app.specy.rars.simulator.BackStepper;
+import app.specy.rars.simulator.ProgramArgumentsAboveStack;
 import app.specy.rars.simulator.Simulator;
 import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSExport;
@@ -162,11 +163,59 @@ public class JsRiscV {
             throw new IllegalStateException("Cannot initialize during an instruction or poke");
         }
         this.main.initialize(startAtMain);
+        // after the registers are reset and before the first instruction, outside the history
+        programArgumentsLayout = ProgramArgumentsAboveStack.store(programArguments);
         app.specy.rars.assembler.MemoryLayoutFacts.resetStack(RegisterFile.getValue(2));
         openPoke = null;
         pokeRecords.clear();
     }
 
+
+    /** The argv every start stores, {@code argv[0]} included; empty stores none. */
+    private String[] programArguments = new String[0];
+
+    /** Where the last {@link #initialize(boolean)} stored the argv, as {@link #getProgramArgumentsLayout()} gives it. */
+    private int[] programArgumentsLayout = new int[0];
+
+    /**
+     * Where the last {@link #initialize(boolean)} stored the program's argv: the start and end of
+     * the half-open range it wrote (the array's address and the stack base), {@code argc}, the
+     * array's address, then the address of each string, {@code argv[0]} first. Empty when it stored
+     * nothing, or before the first initialize. The facts stay as they were written, whatever the
+     * program does to that memory afterwards.
+     */
+    @JSExport
+    public int[] getProgramArgumentsLayout() {
+        return programArgumentsLayout.clone();
+    }
+
+    /**
+     * The program's argv, {@code argv[0]} (its name) included, which every later
+     * {@link #initialize(boolean)} stores above the stack with {@code a0} = argc and {@code a1} =
+     * argv, until it is set again; an empty array stores none. Pointers are as wide as the width
+     * {@code initialize} runs under. See {@link ProgramArgumentsAboveStack} for the layout.
+     *
+     * @throws IllegalArgumentException with a sentence for the person when the words cannot be
+     *                                  stored: too many, a NUL, or more than fits above the stack
+     */
+    @JSExport
+    public void setProgramArguments(String[] argv) {
+        String problem = ProgramArgumentsAboveStack.problem(argv);
+        if (problem != null) throw new IllegalArgumentException(problem);
+        this.programArguments = argv.clone();
+    }
+
+    /** Why {@link #setProgramArguments(String[])} would refuse {@code argv} at a width, or null. */
+    @JSExport
+    public static String programArgumentsProblem(String[] argv, boolean is64Bit) {
+        return ProgramArgumentsAboveStack.problem(argv, is64Bit);
+    }
+
+    /** The most bytes the program name, the Arguments and their argv array may take. */
+    @JSExport
+    public static int programArgumentsSpace() {
+        return (int) ProgramArgumentsAboveStack.space();
+    }
 
     /*
      * Simulation runs inside a single long-lived TeaVM coroutine ("green thread"), so that a
