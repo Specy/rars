@@ -780,6 +780,17 @@ export interface JsRiscV {
     setProgramArguments(argv: string[]): void;
 
     /**
+     * Where the last `initialize` stored the program's argv, for a debugger to show: the start and
+     * end of the half-open range it wrote (the array's address and the stack base), argc, the
+     * address of the NULL-terminated array of pointers (`a1`; 4-byte pointers on RV32, 8 on RV64),
+     * then the address of each string, `argv[0]` first, each ending in a NUL before the next one
+     * starts. Empty when that `initialize` stored nothing, or before the first one. Addresses are
+     * unsigned 32-bit values (`>>> 0`); they are what was written, whatever the program does to that
+     * memory afterwards. See [Program arguments](#program-arguments) in the README.
+     */
+    getProgramArgumentsLayout(): Int32Array;
+
+    /**
      * Why the last run call stopped: `NONE` when none has since the program was initialized, and
      * `EXCEPTION` after one rejected with a `RuntimeError`. Undo does not change it; read
      * `terminated` for whether the program can run.

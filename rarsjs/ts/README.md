@@ -365,6 +365,13 @@ argv; RISC-V programs have 4,080 bytes for them`); `RISCV.checkProgramArguments(
 throws the same without a program, at the width it names or else the one `setIs64Bit` set. An empty array stores nothing, as before
 `setProgramArguments` is called: `a0` and `a1` start at 0.
 
+`getProgramArgumentsLayout()` says where the last `initialize` put them, for a debugger to name
+the bytes: an `Int32Array` of the range's start and end (half-open, from the array to the stack
+base), argc, the array's address, then each string's address, `argv[0]` first. For the example
+above on RV32, `[0x7fffffd4, 0x7ffffffc, 3, 0x7fffffd4, 0x7fffffe5, 0x7fffffec, 0x7ffffff2]`; on
+RV64 the range and the array start at 0x7fffffc0. It is empty when that `initialize` stored
+nothing.
+
 RARS's own command-line arguments (`ProgramArgumentList`, which this does not use) put argc and
 the pointers below the stack pointer and lower it, always with four-byte pointers, and start
 `argv` at the first argument.
@@ -403,6 +410,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `assemble(): RISCVAssembleResult`: Assembles the program. Returns an object containing a report, error list, and an `hasErrors` flag.
 * `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction. It stores the `argv` `setProgramArguments` set, if any.
 * `setProgramArguments(argv: string[]): void`: The `argv` every later `initialize` stores above the stack. See [Program arguments](#program-arguments).
+* `getProgramArgumentsLayout(): Int32Array`: Where the last `initialize` stored that `argv`: the range, argc, the array and each string's address. See [Program arguments](#program-arguments).
 * `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
 * `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
 * `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the

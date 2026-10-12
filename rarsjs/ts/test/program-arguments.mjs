@@ -185,3 +185,30 @@ main:   ${is64Bit ? 'ld' : 'lw'} t0, ${size}(a1)
         `initialize stores them again (${is64Bit ? 'RV64' : 'RV32'})`)
 }
 RISCV.setIs64Bit(false)
+
+// 7. The layout a debugger reads: the range written, argc, the array and each string's address,
+//    as they were stored, whatever the program writes there afterwards; empty when none was stored.
+for (const is64Bit of [false, true]) {
+    RISCV.setIs64Bit(is64Bit)
+    const width = is64Bit ? 'RV64' : 'RV32'
+    const layoutOf = riscv => Array.from(riscv.getProgramArgumentsLayout(), u32)
+    const riscv = core(`
+main:   ${is64Bit ? 'sd' : 'sw'} zero, 0(a1)
+        li   a7, 10
+        ecall`)
+    assert.deepEqual(layoutOf(riscv), [], `nothing before the first initialize (${width})`)
+    riscv.setProgramArguments(['./main', 'hello', 'two words'])
+    riscv.initialize(true)
+    const argv = is64Bit ? 0x7fffffc0 : 0x7fffffd4
+    const expected = [argv, STACK_BASE, 3, argv, 0x7fffffe5, 0x7fffffec, 0x7ffffff2]
+    assert.deepEqual(layoutOf(riscv), expected, width)
+    assert.equal(u32(riscv.getRegisterValue('a1')), argv, `the array is the one a1 points at (${width})`)
+    await runToEnd(riscv)
+    assert.equal(word(riscv, argv), 0, `the program overwrote argv[0] (${width})`)
+    assert.deepEqual(layoutOf(riscv), expected, `the layout is what was stored (${width})`)
+
+    riscv.setProgramArguments([])
+    riscv.initialize(true)
+    assert.deepEqual(layoutOf(riscv), [], `none stored, none reported (${width})`)
+}
+RISCV.setIs64Bit(false)

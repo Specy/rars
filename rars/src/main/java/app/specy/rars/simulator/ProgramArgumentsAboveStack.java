@@ -78,12 +78,15 @@ public final class ProgramArgumentsAboveStack {
      * recorded for undo, so undoing to the program's start keeps them. An empty {@code argv}
      * changes nothing.
      *
+     * @return where it wrote them, for a debugger to name: the start and end of the half-open range
+     *         (the array's address and the stack base), {@code argc}, the array's address again,
+     *         then the address of each string, {@code argv[0]} first; empty when it wrote nothing
      * @throws IllegalArgumentException with {@link #problem(String[])}'s sentence when it has one
      */
-    public static void store(String[] argv) {
+    public static int[] store(String[] argv) {
         String problem = problem(argv);
         if (problem != null) throw new IllegalArgumentException(problem);
-        if (argv.length == 0) return;
+        if (argv.length == 0) return new int[0];
         int pointerBytes = pointerBytes();
         byte[][] strings = encode(argv);
         long argvAddress = argvAddress(strings, pointerBytes);
@@ -114,6 +117,13 @@ public final class ProgramArgumentsAboveStack {
         // straight to the registers, past the back stepper, as storeProgramArguments does
         RegisterFile.getRegister("a0").setValue(argv.length);
         RegisterFile.getRegister("a1").setValue(argvAddress);
+        int[] layout = new int[4 + pointers.length];
+        layout[0] = (int) argvAddress;
+        layout[1] = (int) top();
+        layout[2] = argv.length;
+        layout[3] = (int) argvAddress;
+        System.arraycopy(pointers, 0, layout, 4, pointers.length);
+        return layout;
     }
 
     /** A pointer, zero-extended to eight bytes on RV64, in RARS's little-endian order. */
