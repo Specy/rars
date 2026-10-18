@@ -281,7 +281,16 @@ export type JsInstruction = {
     example: string;
     description: string;
     tokens: JsInstructionToken[];
+    /** True when RV32 has no form like this one; the RV64 width of an RV32 form (`slli` by 33) is not RV64 only. */
     getIsRv64Only: () => boolean;
+    /** True for a pseudo-instruction, which the assembler expands into one or more basic instructions. */
+    getIsPseudo: () => boolean;
+    /**
+     * The basic instructions the assembler expands this pseudo-instruction into, in order, as
+     * templates with RARS's placeholders left in: `la t1,label` gives `auipc RG1, PCH2` and
+     * `addi RG1, RG1, PCL2`. Empty for a basic instruction.
+     */
+    getExpansion: () => string[];
 }
 
 export type RiscvTokenizedLine = {

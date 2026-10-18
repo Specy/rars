@@ -387,7 +387,7 @@ Provides static methods to initialize and create simulator instances.
 * `RISCV.initializeRISCV(): void`
   Initializes the core RISC-V simulation environment. Called internally by `makeRiscVFromFiles`, but can be called explicitly if needed.
 * `RISCV.getInstructionSet(): JsInstruction[]`
-  Returns an array of objects, each describing a supported RISC-V instruction (name, example, description, tokens).
+  Returns an array of objects, each describing one form of a supported RISC-V instruction at the current width (name, example, description, tokens). Several forms can share a name. `getIsPseudo()` is true when the form is a pseudo-instruction, which the assembler expands into one or more basic instructions, and `getExpansion()` returns their templates in order: `la t1,label` gives `["auipc RG1, PCH2", "addi RG1, RG1, PCL2"]`, and a basic instruction gives `[]`. A template names the source operands by token position, where the operator is token 0 and parentheses count but commas do not: `RG1` is the register in token 1, `VH2` and `VL2` the upper 20 and lower 12 bits of the value in token 2, `PCH2` and `PCL2` those of the label in token 2 as an offset from the pseudo-instruction, and `LAB` the label itself; the header of `PseudoOps.java` lists the placeholders. `getIsRv64Only()` is true when RV32 has no form with the same name and operand types; a form that only widens an immediate, such as `slli t1,t2,33` with its 6-bit shift amount, is not RV64 only. All three are methods, not properties.
 * `RISCV.setIs64Bit(is64Bit: boolean): void`
   Sets the simulator to operate in 32-bit or 64-bit mode. This affects the instruction set.
 * `RISCV.checkProgramArguments(argv: string[], is64Bit?: boolean): void` and `RISCV.programArgumentsSpace(): number`
@@ -466,7 +466,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `JsBackStep`: Interface representing an entry in the undo stack, detailing the action, parameters, and PC value.
 * `JsProgramStatement`: Interface representing an assembled instruction, including its source path, source line, address, binary/machine/assembly representations, and full original source line.
 * `JsInstructionToken`: Interface representing a token from the assembly source (value, type, and one-based source column).
-* `JsInstruction`: Interface describing a RISC-V instruction (name, example, description, token patterns).
+* `JsInstruction`: Interface describing one form of a RISC-V instruction (name, example, description, token patterns, the `getIsRv64Only()` and `getIsPseudo()` flags, and the `getExpansion()` templates).
 * `RiscvTokenizedLine`: An object containing source identity, original and processed line strings, and parsed `JsInstructionToken`s.
 * `RISCVAssembleError`: Interface describing an assembly diagnostic with its source path, one-based line and column, warning status, and structured macro expansion trace.
 * `RISCVAssembleResult`: Interface for the result of `assemble()`, containing a report string, list of `RISCVAssembleError`s, and a `hasErrors` boolean.

@@ -198,6 +198,73 @@ console.log('ok - RV64 immediate shifts operate on all 64 bits')
 
 assert.ok(RISCV.getInstructionSet().length > 0, 'instruction set should not be empty')
 
+// Each entry is one form. `getIsPseudo` marks the forms the assembler expands, and a mnemonic can
+// have both kinds: `lw t1, -100(t2)` is the machine instruction, `lw t1, label` a pseudo-instruction.
+// `getIsRv64Only` means RV32 has no such form, so the RV64 width of an RV32 form, `slli` with a
+// 6 bit shift amount, is not RV64 only, while `addw` is.
+{
+    const formsOf = (set, name) => set.filter(instruction => instruction.name === name)
+    const rv32 = RISCV.getInstructionSet()
+    assert.equal(rv32.some(instruction => instruction.getIsRv64Only()), false, 'RV32 has no RV64 only form')
+    for (const is64Bit of [false, true]) {
+        RISCV.setIs64Bit(is64Bit)
+        const label = is64Bit ? 'RV64' : 'RV32'
+        const set = RISCV.getInstructionSet()
+        const lw = formsOf(set, 'lw')
+        assert.equal(lw.find(form => form.example === 'lw t1, -100(t2)')?.getIsPseudo(), false,
+            `${label}: lw with a base register and offset is a machine instruction`)
+        assert.equal(lw.find(form => form.example.trim() === 'lw t1,label')?.getIsPseudo(), true,
+            `${label}: lw of a label is a pseudo-instruction`)
+        for (const name of ['li', 'mv']) {
+            const forms = formsOf(set, name)
+            assert.ok(forms.length > 0 && forms.every(form => form.getIsPseudo()), `${label}: every ${name} form is a pseudo-instruction`)
+        }
+        assert.ok(formsOf(set, 'add').every(form => !form.getIsPseudo()), `${label}: add is a machine instruction`)
+        // `getExpansion` is the pseudo-instruction's templates, placeholders left in; a machine
+        // instruction has none.
+        for (const form of set) {
+            const expansion = form.getExpansion()
+            assert.ok(Array.isArray(expansion), `${label} ${form.example}: the expansion is an array`)
+            assert.equal(expansion.length > 0, form.getIsPseudo(), `${label} ${form.example}: only a pseudo-instruction has an expansion`)
+            assert.ok(expansion.every(template => template === template.trim() && template.length > 0), `${label} ${form.example}: templates are trimmed`)
+        }
+        assert.deepEqual(lw.find(form => form.example === 'lw t1, -100(t2)')?.getExpansion(), [], `${label}: machine lw has no expansion`)
+        assert.deepEqual(lw.find(form => form.example.trim() === 'lw t1,label')?.getExpansion(), ['auipc RG1, PCH2', 'lw RG1, PCL2(RG1)'],
+            `${label}: lw of a label is auipc then lw`)
+        assert.deepEqual(formsOf(set, 'la').find(form => form.example.trim() === 'la t1,label')?.getExpansion(), ['auipc RG1, PCH2', 'addi RG1, RG1, PCL2'],
+            `${label}: la is auipc then addi`)
+    }
+    // Still RV64 from the loop: reading the flags must not leave the width switched.
+    const rv64 = RISCV.getInstructionSet()
+    assert.equal(RISCV.is64Bit(), true, 'reading the set keeps the width')
+    for (const name of ['slli', 'srli', 'srai']) {
+        const forms = formsOf(rv64, name)
+        assert.ok(forms.length > 0, `RV64 has ${name}`)
+        assert.ok(forms.every(form => !form.getIsRv64Only()), `RV64 ${name} is the RV64 width of an RV32 form, not RV64 only`)
+    }
+    for (const name of ['addw', 'ld', 'sd', 'sext.w']) {
+        const forms = formsOf(rv64, name)
+        assert.ok(forms.length > 0 && forms.every(form => form.getIsRv64Only()), `${name} is RV64 only`)
+    }
+    // The 32 bit set read for the comparison must not change what RV64 assembles and runs.
+    const wide = makeSingleFileRiscV('\n    .text\nmain:\n    li t0, 1\n    slli t1, t0, 33\n    addw t2, t0, t0\n    li a7, 10\n    ecall\n')
+    registerHandlers(wide, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    const wideAssembled = wide.assemble()
+    assert.equal(wideAssembled.hasErrors, false, `RV64 program failed to assemble: ${wideAssembled.report}`)
+    wide.initialize(true)
+    let steps = 0
+    while (!wide.terminated && steps < 100) {
+        await wide.step()
+        steps++
+    }
+    const wideRegisters = Array.from(wide.getRegistersValuesLong(), value => BigInt(value))
+    assert.equal(wideRegisters[RISCV_REGISTERS.indexOf('t1')], 1n << 33n, 'RV64 slli by 33 after reading the set')
+    assert.equal(wideRegisters[RISCV_REGISTERS.indexOf('t2')], 2n, 'RV64 addw after reading the set')
+    RISCV.setIs64Bit(false)
+    const pseudo = rv32.filter(form => form.getIsPseudo()).length
+    console.log(`ok - instruction forms: ${pseudo} of ${rv32.length} RV32 forms are pseudo-instructions, slli/srli/srai not RV64 only`)
+}
+
 // Multi-file construction: one immutable virtual source tree, rooted at the entry file.
 RISCV.setIs64Bit(false)
 const projectFiles = {
