@@ -100,14 +100,17 @@ public class BackStepper {
 
     // Module-lifetime identities: neither Undo, initialize nor reassembly can reuse one.
     // Only the bounded BackStep slots retain identities; no execution journal grows with a run.
-    private static long nextSerial = 1;
-    private long instructionSerial;
-    private long pokeSerial;
+    // Serials are doubles on purpose: TeaVM compiles a Java long into an object of its own and
+    // allocates for every operation on it, and one is taken per instruction. A double counts
+    // exactly up to 2^53, far past anything a session reaches.
+    private static double nextSerial = 1;
+    private double instructionSerial;
+    private double pokeSerial;
     private int instructionPc;
     private boolean instructionDiscarded;
 
-    private static long allocateSerial() {
-        if (nextSerial == Long.MAX_VALUE) {
+    private static double allocateSerial() {
+        if (nextSerial >= 9007199254740991.0) {
             throw new IllegalStateException("Instruction serial space exhausted");
         }
         return nextSerial++;
@@ -134,9 +137,14 @@ public class BackStepper {
         }
     }
 
+    /** Whether an instruction is executing, without the cost of a long. */
+    public boolean instructionOpen() {
+        return instructionSerial != 0;
+    }
+
     /** Zero outside execution; never rewound or reused. Available across an awaited handler. */
     public long getCurrentInstructionSerial() {
-        return instructionSerial;
+        return (long) instructionSerial;
     }
 
     /** A reset forgets retained restores without rewinding the serial allocator. */
@@ -641,7 +649,7 @@ public class BackStepper {
 
     // Represents a "back step" (undo action) on the stack.
     public class BackStep {
-        private long serial;
+        private double serial;
         private Action action;  // what do do MEMORY_RESTORE_WORD, etc
         private int pc;      // program counter value when original step occurred
         private int param1;  // first parameter required by that action
@@ -726,7 +734,7 @@ public class BackStepper {
         }
 
         public long getSerial() {
-            return serial;
+            return (long) serial;
         }
 
         public int getAction() {
@@ -857,7 +865,7 @@ public class BackStepper {
             if (capacity == 0 || instructionDiscarded && instructionSerial != 0) return false;
             if (size == stack.length && stack.length < capacity) grow();
             if (size == capacity) {
-                long oldest = fromTop(size - 1).serial;
+                double oldest = fromTop(size - 1).serial;
                 do { size--; } while (size > 0 && fromTop(size - 1).serial == oldest);
                 if (oldest == instructionSerial && instructionSerial != 0) {
                     instructionDiscarded = true;

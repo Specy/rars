@@ -570,7 +570,7 @@ public class Simulator extends Observable {
                     ControlAndStatusRegisterFile.incrementCounters(backStepping, pc);
 
                 } finally {
-                    if (backStepper.getCurrentInstructionSerial() != 0) backStepper.endInstruction();
+                    if (backStepper.instructionOpen()) backStepper.endInstruction();
                 }
 
                 //     Return if we've reached a breakpoint.
