@@ -3,10 +3,8 @@ package app.specy.rarsjs;
 import app.specy.rars.riscv.hardware.AccessNotice;
 import app.specy.rars.riscv.hardware.MemoryAccessNotice;
 import org.teavm.jso.JSBody;
-import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.core.JSFunction;
-import org.teavm.jso.core.JSNumber;
 
 import java.util.Observable;
 import java.util.Observer;
@@ -65,20 +63,31 @@ class JsMemoryObserver implements Observer {
         if (handler == null) {
             return;
         }
-        JSNumber address = JSNumber.valueOf(notice.getAddress());
-        JSNumber value = JSNumber.valueOf(notice.getValue());
-        try {
-            if (reportsLength) {
-                handler.call(handler, address, JSNumber.valueOf(notice.getLength()), value);
-            } else {
-                handler.call(handler, address, value);
-            }
-        } catch (Throwable thrown) {
+        int address = notice.getAddress();
+        int value = notice.getValue();
+        // The call and its catch are JavaScript, so that what the observer threw arrives as it was
+        // thrown: on the WebAssembly build a Java catch only sees a wrapper without it. Nothing is
+        // allocated unless it threw, because this runs for every store into a watched range.
+        JSObject failure = reportsLength
+                ? observeRange(handler, address, notice.getLength(), value)
+                : observeWord(handler, address, value);
+        if (!isNullish(failure)) {
             // An observer is host code like an IO handler: a run it fails ends as the host's failure.
-            JSObject reason = JSExceptions.getJSException(thrown);
+            JSObject reason = thrownBy(failure);
             throw new JsHandlerFailure("Memory observer threw: " + describe(reason), reason);
         }
     }
+
+    @JSBody(params = {"handler", "address", "length", "value"},
+            script = "try { handler.call(handler, address, length, value); } catch (e) { return { error: e }; } return null;")
+    private static native JSObject observeRange(JSFunction handler, int address, int length, int value);
+
+    @JSBody(params = {"handler", "address", "value"},
+            script = "try { handler.call(handler, address, value); } catch (e) { return { error: e }; } return null;")
+    private static native JSObject observeWord(JSFunction handler, int address, int value);
+
+    @JSBody(params = "failure", script = "return failure.error;")
+    private static native JSObject thrownBy(JSObject failure);
 
     @JSBody(params = "error", script = "return error instanceof Error ? (error.message || String(error)) : String(error);")
     private static native String describe(JSObject error);

@@ -4,7 +4,6 @@ import app.specy.rars.riscv.io.RISCVIO;
 import app.specy.rars.riscv.io.RISCVIOError;
 import app.specy.rars.util.JavaRandom;
 import org.teavm.jso.JSBody;
-import org.teavm.jso.JSExceptions;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSProperty;
 import org.teavm.jso.JSObject;
@@ -42,26 +41,22 @@ public class JsRISCVIO extends RISCVIO {
     private JSObject invokeHandler(String name, JSObject... args) {
         JSFunction handler = handlers.get(name);
         if (handler == null) throw new JsHandlerFailure("No handler registered for " + name, null);
-        try {
-            return callWith(handler, args);
-        } catch (Throwable thrown) {
-            JSObject reason = JSExceptions.getJSException(thrown);
-            throw new JsHandlerFailure("Handler " + name + " threw: " + describe(reason), reason);
-        }
+        JSArray<JSObject> arguments = JSArray.create();
+        for (JSObject argument : args) arguments.push(argument);
+        Settled outcome = guardedCall(handler, arguments);
+        if (outcome.isOk()) return outcome.getValue();
+        JSObject reason = outcome.getError();
+        throw new JsHandlerFailure("Handler " + name + " threw: " + describe(reason), reason);
     }
 
-    private static JSObject callWith(JSFunction handler, JSObject... args) {
-        if(args.length == 0) return (JSObject) handler.call(handler);
-        if(args.length == 1) return (JSObject) handler.call(handler, args[0]);
-        if(args.length == 2) return (JSObject) handler.call(handler, args[0], args[1]);
-        if(args.length == 3) return (JSObject) handler.call(handler, args[0], args[1], args[2]);
-        if(args.length == 4) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3]);
-        if(args.length == 5) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4]);
-        if(args.length == 6) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4], args[5]);
-        if(args.length == 7) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
-        if(args.length == 8) return (JSObject) handler.call(handler, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
-        throw new IllegalArgumentException("Too many arguments, max 8");
-    }
+    /**
+     * Calls the handler and reports what it threw as a value, in JavaScript. Catching it in Java
+     * would depend on how the target turns a JavaScript exception into a Java one, and on the
+     * WebAssembly build that wrapper no longer carries what was thrown.
+     */
+    @JSBody(params = {"handler", "args"}, script = "try { return { ok: true, value: handler.apply(handler, args) }; } "
+            + "catch (e) { return { ok: false, error: e }; }")
+    private static native Settled guardedCall(JSFunction handler, JSArray<JSObject> args);
 
     /**
      * A handler may return the value directly or a promise of it. Anything thenable is awaited,
@@ -106,24 +101,24 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     private int callIntHandler(String name, JSObject... args) {
-        Object result = callHandler(name, args);
-        if (result instanceof JSNumber) {
+        JSObject result = callHandler(name, args);
+        if (isNumber(result)) {
             return ((JSNumber) result).intValue();
         }
         throw new JsHandlerFailure("Handler " + name + " did not return an integer", null);
     }
 
     private String callStringHandler(String name, JSObject... args) {
-        Object result = callHandler(name, args);
-        if (result instanceof JSString) {
+        JSObject result = callHandler(name, args);
+        if (isString(result)) {
             return ((JSString) result).stringValue();
         }
         throw new JsHandlerFailure("Handler " + name + " did not return a string", null);
     }
 
     private double callDoubleHandler(String name, JSObject... args) {
-        Object result = callHandler(name, args);
-        if (result instanceof JSNumber) {
+        JSObject result = callHandler(name, args);
+        if (isNumber(result)) {
             return ((JSNumber) result).doubleValue();
         }
         throw new JsHandlerFailure("Handler " + name + " did not return a double", null);
@@ -135,9 +130,9 @@ public class JsRISCVIO extends RISCVIO {
      */
     private int callReadHandler(String name, byte[] destination, int length, JSObject... args) {
         JSObject result = callHandler(name, args);
-        if (result instanceof JSArray) {
+        if (isArray(result)) {
             JSArray<JSObject> tuple = (JSArray<JSObject>) result;
-            if (tuple.getLength() == 2 && tuple.get(0) instanceof JSNumber && tuple.get(1) instanceof JSArray) {
+            if (tuple.getLength() == 2 && isNumber(tuple.get(0)) && isArray(tuple.get(1))) {
                 int count = ((JSNumber) tuple.get(0)).intValue();
                 if (count < 0) return -1;
                 // The handler answers with plain JavaScript numbers, which is what its published
@@ -157,6 +152,19 @@ public class JsRISCVIO extends RISCVIO {
         for (int i = 0; i < bytes.length; i++) numbers.set(i, JSNumber.valueOf(bytes[i] & 0xff));
         return numbers;
     }
+
+    /**
+     * Type tests that ask JavaScript. `instanceof JSNumber` is true of null on the WebAssembly
+     * build, where it only checks that the value is not a Java object.
+     */
+    @JSBody(params = "value", script = "return typeof value === 'number';")
+    private static native boolean isNumber(JSObject value);
+
+    @JSBody(params = "value", script = "return Array.isArray(value);")
+    private static native boolean isArray(JSObject value);
+
+    @JSBody(params = "value", script = "return typeof value === 'string';")
+    private static native boolean isString(JSObject value);
 
     @JSBody(params = "value", script = "return value === null;")
     private static native boolean isNull(JSObject value);
@@ -195,7 +203,7 @@ public class JsRISCVIO extends RISCVIO {
     public String inputDialog(String message) {
         JSObject result = callHandler("inputDialog", JSString.valueOf(message));
         if (isNull(result)) return null;
-        if (result instanceof JSString) return ((JSString) result).stringValue();
+        if (isString(result)) return ((JSString) result).stringValue();
         throw new JsHandlerFailure("Handler inputDialog did not return a string or null", null);
     }
 
@@ -274,7 +282,7 @@ public class JsRISCVIO extends RISCVIO {
             return hostRandomSeed();
         }
         JSObject result = callHandler("randomSeed", JSNumber.valueOf(index));
-        if (result instanceof JSNumber) {
+        if (isNumber(result)) {
             double seed = ((JSNumber) result).doubleValue();
             if (seed >= 0 && seed < JavaRandom.SEED_LIMIT && seed == Math.floor(seed)) {
                 return seed;

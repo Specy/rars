@@ -112,6 +112,11 @@ jobs:
         working-directory: rarsjs/ts
         run: npm test
 
+      # The same tests again on the WebAssembly build, which Node only compiles behind a flag.
+      - name: Run tests on the WebAssembly build
+        working-directory: rarsjs/ts
+        run: npm run test:wasm
+
       # No NODE_AUTH_TOKEN: npm detects the OIDC environment and exchanges it
       # for a short-lived, run-scoped credential. Provenance attestations are
       # generated automatically for public packages, so --provenance is not

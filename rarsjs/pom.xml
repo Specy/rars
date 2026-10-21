@@ -93,6 +93,7 @@
                 </dependencies>
                 <executions>
                     <execution>
+                        <id>javascript</id>
                         <goals>
                             <goal>compile</goal>
                         </goals>
@@ -107,6 +108,23 @@
                             <optimizationLevel>ADVANCED</optimizationLevel>
                             <targetType>JAVASCRIPT</targetType>
                             <jsModuleType>ES2015</jsModuleType>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>webassembly-gc</id>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <phase>process-classes</phase>
+                        <configuration>
+                            <targetDirectory>${project.basedir}/ts/src/generated</targetDirectory>
+                            <targetFileName>rars.wasm</targetFileName>
+                            <mainClass>app.specy.rarsjs.JsRiscV</mainClass>
+                            <debugInformationGenerated>true</debugInformationGenerated>
+                            <sourceMapsGenerated>true</sourceMapsGenerated>
+                            <minifying>false</minifying>
+                            <optimizationLevel>ADVANCED</optimizationLevel>
+                            <targetType>WEBASSEMBLY_GC</targetType>
                         </configuration>
                     </execution>
                 </executions>

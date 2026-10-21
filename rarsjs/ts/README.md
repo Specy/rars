@@ -376,6 +376,30 @@ RARS's own command-line arguments (`ProgramArgumentList`, which this does not us
 the pointers below the stack pointer and lower it, always with four-byte pointers, and start
 `argv` at the first argument.
 
+## WebAssembly build
+
+The package carries the Core compiled twice: to JavaScript, which is what runs by default, and to
+WebAssembly GC, which runs about twice as fast. Switch to it once, before the first program is made:
+
+```ts
+import { useWebAssembly, coreBackend, makeRiscVFromFiles } from '@specy/risc-v'
+
+await useWebAssembly() // 'webassembly', or 'javascript' when this engine cannot run it
+console.log(coreBackend())
+```
+
+It needs WebAssembly GC and exception handling with `exnref` (recent Chrome, Firefox and Safari; Node
+only behind `--experimental-wasm-exnref`). Where the engine lacks either, or loading fails for any
+reason, `useWebAssembly` resolves to `'javascript'` and nothing throws, so it is always safe to call.
+The build is chosen for the whole module: cores made before the call keep the JavaScript build.
+
+The bundle finds `rars.wasm` next to `index.mjs` (`new URL('./rars.wasm', import.meta.url)`), so a
+bundler has to treat it as an asset. The CommonJS entry point has no `import.meta` and stays on JavaScript.
+One difference: the WebAssembly build converts a number passed for an `int` parameter at the boundary,
+so a fractional or `NaN` register index is truncated instead of rejected.
+
+`npm run test:wasm` runs the whole test suite on the WebAssembly build.
+
 ## API
 
 ### `RISCV` Static Class
