@@ -435,7 +435,7 @@ public class Memory extends Observable {
             oldValue = storeBytesInTable(memoryMapBlockTable, relativeByteAddress, length, value);
         } else {
             // falls outside addressing range
-            throw new AddressErrorException("address out of range ",
+            throw outOfRange("address out of range ",
                     SimulationException.STORE_ACCESS_FAULT, address);
         }
         notifyAnyObservers(AccessNotice.WRITE, address, length, value);
@@ -511,7 +511,7 @@ public class Memory extends Observable {
             oldValue = storeWordInTable(memoryMapBlockTable, relative, value);
         } else {
             // falls outside addressing range
-            throw new AddressErrorException("store address out of range ",
+            throw outOfRange("store address out of range ",
                     SimulationException.STORE_ACCESS_FAULT, address);
         }
         return oldValue;
@@ -692,7 +692,7 @@ public class Memory extends Observable {
             }
         } else {
             // falls outside addressing range
-            throw new AddressErrorException("address out of range ",
+            throw outOfRange("address out of range ",
                     SimulationException.LOAD_ACCESS_FAULT, address);
         }
         if (notify) notifyAnyObservers(AccessNotice.READ, address, length, value);
@@ -746,7 +746,7 @@ public class Memory extends Observable {
             }
         } else {
             // falls outside addressing range
-            throw new AddressErrorException("address out of range ",
+            throw outOfRange("address out of range ",
                     SimulationException.LOAD_ACCESS_FAULT, address);
         }
         notifyAnyObservers(AccessNotice.READ, address, Memory.WORD_LENGTH_BYTES, value);
@@ -795,7 +795,7 @@ public class Memory extends Observable {
             }
         } else {
             // falls outside addressing range
-            throw new AddressErrorException("address out of range ", SimulationException.LOAD_ACCESS_FAULT, address);
+            throw outOfRange("address out of range ", SimulationException.LOAD_ACCESS_FAULT, address);
         }
         // Do not notify observers.  This read operation is initiated by the
         // dump feature, not the executing program.
@@ -1039,6 +1039,25 @@ public class Memory extends Observable {
      */
     public static boolean doublewordAligned(int address) {
         return (address % (WORD_LENGTH_BYTES + WORD_LENGTH_BYTES) == 0);
+    }
+
+    /**
+     * The error for an access outside every segment. When the stack pointer has already gone below
+     * the stack's limit, as deep recursion or a local array larger than the stack takes it, the
+     * access is the stack overflowing and the error says so; otherwise the address is out of range.
+     * The exception type stays the access fault either way.
+     */
+    private static AddressErrorException outOfRange(String message, int type, int address) {
+        int stackPointer = RegisterFile.getValue(RegisterFile.STACK_POINTER_REGISTER);
+        if (Integer.compareUnsigned(stackPointer, stackLimitAddress) <= 0
+                && Integer.compareUnsigned(address, stackBaseAddress) <= 0) {
+            long size = Integer.toUnsignedLong(stackBaseAddress) - Integer.toUnsignedLong(stackLimitAddress);
+            String amount = size % (1 << 20) == 0 ? (size >> 20) + " MiB"
+                    : size % 1024 == 0 ? (size >> 10) + " KiB" : size + " bytes";
+            return new AddressErrorException("stack overflow: the program needs more than its "
+                    + amount + " of stack, at", type, address);
+        }
+        return new AddressErrorException(message, type, address);
     }
 
     /**

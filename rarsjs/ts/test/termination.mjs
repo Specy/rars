@@ -172,6 +172,16 @@ for (const is64Bit of [false, true]) {
             ['exception', 0, null, null])
         assert.equal(lostError.message, 'Instruction load access error')
 
+        // An access past the stack's end once the stack pointer is below its limit, as deep
+        // recursion makes it, is a stack overflow; a wild address with the stack in place is not.
+        const deep = core(['main: li sp, 0x7fbffff0', 'push: sw zero, 0(sp)', '      li a7, 10', '      ecall'])
+        const deepError = await failure(() => deep.simulate())
+        const push = deep.getAddressOfLabel('push').toString(16).padStart(8, '0')
+        assert.deepEqual([deepError.kind, deepError.line, deepError.message], ['exception', 2,
+            `Runtime exception at 0x${push}: stack overflow: the program needs more than its 4 MiB of stack, at 0x7fbffff0`])
+        const wild = core(['main: li t0, 0x60000000', '      sw zero, 0(t0)', '      li a7, 10', '      ecall'])
+        assert.match((await failure(() => wild.simulate())).message, /: address out of range 0x60000000$/)
+
         // Calling a program that never assembled is not a runtime failure.
         const broken = RISCV.makeRiscVFromFiles({ 'main.asm': 'main: bogus' }, 'main.asm')
         broken.assemble()
