@@ -137,6 +137,7 @@ public class RARS {
         assemblyAttempted = true;
         assembled = false;
         stopReason = null;
+        lastRunInstructionCount = 0;
         Globals.program = null;
         Globals.symbolTable.clear();
         Globals.memory.clear();
@@ -167,6 +168,7 @@ public class RARS {
         ProgramExit.reset();
         RandomStreams.reset();
         stopReason = null;
+        lastRunInstructionCount = 0;
 
         // Copy in assembled code and arguments
         //simulation.copyFrom(assembled);
@@ -212,19 +214,35 @@ public class RARS {
 
     private Simulator.Reason run(Run body) throws SimulationException {
         requireAssembled();
+        lastRunInstructionCount = 0;
         if (ProgramExit.hasExited()) {
             // An exit ends the program: what follows the ecall is not run, as RARS does not
             // resume a program that has finished. Undo or initialize starts it again.
             stopReason = Simulator.Reason.NORMAL_TERMINATION;
             return stopReason;
         }
+        double before = Simulator.getInstance().getInstructionsRun();
         try {
             stopReason = body.run();
         } catch (SimulationException failure) {
             stopReason = Simulator.Reason.EXCEPTION;
             throw failure;
+        } finally {
+            lastRunInstructionCount = Simulator.getInstance().getInstructionsRun() - before;
         }
         return stopReason;
+    }
+
+    /** How many instructions the last run call executed, see {@link Simulator#getInstructionsRun()}. */
+    private double lastRunInstructionCount = 0;
+
+    public double getLastRunInstructionCount() {
+        return lastRunInstructionCount;
+    }
+
+    /** Ends the run call in flight after its current instruction, see {@link Simulator#pauseAfterInstruction()}. */
+    public void pause() {
+        Simulator.getInstance().pauseAfterInstruction();
     }
 
     public static void setIs64Bit(boolean is64Bit) {

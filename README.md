@@ -234,6 +234,7 @@ Every run call (`step`, `simulate`, `simulateWithLimit`, `simulateWithBreakpoint
 | `BREAKPOINT` | the program counter reached a breakpoint address, whose instruction has not run, or an `ebreak` ran |
 | `NORMAL_TERMINATION` | exit (10) or exit2 (93) ran |
 | `CLIFF_TERMINATION` | the program ran off the end of its code; the call that runs the last instruction says so |
+| `PAUSE` | `pause()` ended the call after the instruction whose handler called it |
 
 `terminated` is read from the program's state, so it is right after `undo()` too: it is true once
 an exit has run or there is no statement at the program counter, and `getNextStatement()` then
@@ -241,7 +242,22 @@ returns `null`. A program that has exited runs nothing more: every run call reso
 `NORMAL_TERMINATION` again until `undo()` or `initialize()`. `exitCode` is exit2's `a0` once it has
 run and 0 otherwise, after exit and after running off the end too; `initialize` resets it and
 undoing the exit puts back the code before it. `getStopReason()` reports the last run call's
-reason, `NONE` after `initialize`.
+reason, `NONE` after `initialize`, and `getLastRunInstructionCount()` how many instructions it
+executed, the one that exited or failed included.
+
+A handler can end the call it runs in with `pause()`. The call finishes the instruction, handler
+included, and resolves to `PAUSE`, or to `BREAKPOINT` when the next instruction is a breakpoint, or
+to `CLIFF_TERMINATION` when there is none. A host that serves `sleep` (32) this way gets its run
+call back where the program's frame ends, rather than wherever its instruction limit falls:
+
+```typescript
+riscvSimulator.registerHandler("sleep", async (milliseconds) => {
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
+    riscvSimulator.pause();
+});
+const reason = await riscvSimulator.simulateWithLimit(100_000);   // PAUSE after the first sleep
+const ran = riscvSimulator.getLastRunInstructionCount();          // the instructions up to it
+```
 
 A runtime failure rejects the run call with a `RuntimeError`, an `Error` with typed fields:
 
@@ -318,6 +334,8 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `initialize(startAtMain: boolean): void`: Initializes the simulator state for execution. If `startAtMain` is true, execution begins at the `main` label; otherwise, it starts at the first instruction.
 * `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
 * `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
+* `getLastRunInstructionCount(): number`: How many instructions the last run call executed.
+* `pause(): void`: From a handler, ends the run call in flight after its instruction. See [Running and stopping](#running-and-stopping).
 * `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the
   first page after static data in a `gnu-compiler-v1` program whose static data reaches past it.
   See [Memory layout](#memory-layout).

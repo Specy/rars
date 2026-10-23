@@ -326,6 +326,25 @@ public class JsRiscV {
         return run(() -> this.main.step().ordinal());
     }
 
+    /**
+     * How many instructions the last run call executed, the one that exited or failed included;
+     * 0 when none has run since initialize, or the call ran nothing.
+     */
+    @JSExport
+    public double getLastRunInstructionCount() {
+        return this.main.getLastRunInstructionCount();
+    }
+
+    /**
+     * Ends the run call in flight after the instruction it is executing, which is the one whose IO
+     * handler calls this: the call resolves to PAUSE, or BREAKPOINT or CLIFF_TERMINATION for the
+     * instruction after it. Without a call in flight it does nothing.
+     */
+    @JSExport
+    public void pause() {
+        this.main.pause();
+    }
+
     @JSExport
     public int getStopReason() {
         // Null until a run call has stopped since initialize; StopReason.NONE on the TS side.

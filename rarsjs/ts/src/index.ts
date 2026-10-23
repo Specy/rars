@@ -133,7 +133,7 @@ export enum StopReason {
     NORMAL_TERMINATION,
     /** The program ran off the end of its code: there is no statement at the program counter. */
     CLIFF_TERMINATION,
-    /** Not reachable through this package. */
+    /** `pause()` ended the call after the instruction whose handler called it. */
     PAUSE,
     /** Not reachable through this package. */
     STOP
@@ -863,6 +863,23 @@ export interface JsRiscV {
      * `terminated` for whether the program can run.
      */
     getStopReason(): StopReason;
+
+    /**
+     * How many instructions the last run call executed, the one that exited or failed included: 0
+     * when none has run since the program was initialized, or the call ran nothing. Exact where the
+     * limit is not, for a call a breakpoint, a pause or the end of the program cut short.
+     */
+    getLastRunInstructionCount(): number;
+
+    /**
+     * Ends the run call in flight after the instruction it is executing. An IO handler is the only
+     * host code that runs while a call is in flight, so that is where this is called from: the call
+     * then resolves to `PAUSE` once the instruction and its handler have finished, or to
+     * `BREAKPOINT` when the next instruction is a breakpoint, or to `CLIFF_TERMINATION` when there
+     * is none. Pausing at a `sleep` (32) is how a host ends its run call where the program's frame
+     * does. Without a call in flight it does nothing.
+     */
+    pause(): void;
 
     /**
      * The program's exit code: exit2's (93) operand once it has run, 0 otherwise - after exit (10),

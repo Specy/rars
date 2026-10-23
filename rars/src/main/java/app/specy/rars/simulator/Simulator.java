@@ -118,6 +118,32 @@ public class Simulator extends Observable {
     }
 
     /**
+     * Every instruction any run has begun, the one that exited or failed included, never rewound:
+     * a host takes the difference across one run call to know how many it executed. A double for
+     * the reason BackStepper counts its serials in doubles, and exact as far.
+     */
+    private double instructionsRun;
+
+    public double getInstructionsRun() {
+        return instructionsRun;
+    }
+
+    /**
+     * Ends the run in flight after the instruction it is executing, with {@link Reason#PAUSE}; a
+     * breakpoint on the next instruction is reported instead, and so is the end of the program
+     * when there is no next instruction. The host only runs while a run is in flight inside an IO
+     * handler, so that is where this is called from. Without a run in flight it does nothing.
+     * <p>
+     * Not {@link #pauseExecution()}, which is the GUI's: it lets go of the thread the run is still
+     * using, which {@link #simulate} then reads its outcome from.
+     */
+    public void pauseAfterInstruction() {
+        if (simulatorThread != null) {
+            simulatorThread.pauseAfterInstruction();
+        }
+    }
+
+    /**
      * Whether there is no statement at {@code address}, so that a program whose counter reaches it
      * has run off the end. An address that cannot be fetched at all is not that: running it
      * reports the bad program counter as an exception.
@@ -250,6 +276,15 @@ public class Simulator extends Observable {
         }
 
 
+
+        /**
+         * {@link #setStop} without its monitor: the run and the handler asking for the pause are on
+         * the same thread, and a TeaVM build does not need a notify to see the flag.
+         */
+        void pauseAfterInstruction() {
+            stop = true;
+            constructReturnReason = Reason.PAUSE;
+        }
 
         private void stopExecution(boolean done, Reason reason) {
             this.done = done;
@@ -570,7 +605,10 @@ public class Simulator extends Observable {
                     ControlAndStatusRegisterFile.incrementCounters(backStepping, pc);
 
                 } finally {
-                    if (backStepper.instructionOpen()) backStepper.endInstruction();
+                    if (backStepper.instructionOpen()) {
+                        backStepper.endInstruction();
+                        instructionsRun++;
+                    }
                 }
 
                 //     Return if we've reached a breakpoint.
@@ -593,6 +631,12 @@ public class Simulator extends Observable {
                     }
                     waiting = false;
                 }
+            }
+            // As for the instruction limit above: a pause after the program's last instruction is
+            // the end of the program, which the call that ran it reports.
+            if (constructReturnReason == Reason.PAUSE && noStatementAt(RegisterFile.getProgramCounter())) {
+                stopExecution(true, Reason.CLIFF_TERMINATION);
+                return;
             }
             stopExecution(false, constructReturnReason);
         }
