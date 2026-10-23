@@ -67,6 +67,18 @@ public abstract class RISCVIO {
     public abstract void sleep(int milliseconds);
 
     /**
+     * Plays a MIDI tone, for MidiOut (syscall 31) and MidiOutSync (33), without waiting for it to
+     * end: 33 waits through {@link #sleep} afterwards, for the same duration. The syscall has
+     * already put each argument outside its range back to RARS's default.
+     *
+     * @param pitch      0 to 127, 60 being middle C
+     * @param duration   in milliseconds, 0 or more
+     * @param instrument 0 to 127, the General MIDI program, 0 being acoustic grand piano
+     * @param volume     0 to 127
+     */
+    public abstract void midiOut(int pitch, int duration, int instrument, int volume);
+
+    /**
      * Program time in milliseconds, the value the time syscall reports. It is the environment's
      * clock rather than the host's so that a scripted run can hand out a virtual clock instead of
      * the wall clock and stay reproducible.

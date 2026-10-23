@@ -21,6 +21,8 @@ public class SyscallProperties extends ConfigMap {
     public static final String Close = "Close";
     public static final String Exit2 = "Exit2";
     public static final String Sleep = "Sleep";
+    public static final String MidiOut = "MidiOut";
+    public static final String MidiOutSync = "MidiOutSync";
     public static final String Time = "Time";
     public static final String PrintIntHex = "PrintIntHex";
     public static final String PrintIntBinary = "PrintIntBinary";
@@ -68,7 +70,9 @@ public class SyscallProperties extends ConfigMap {
         put(Close, "57");
         put(Exit2, "93");
         put(Time, "30");
+        put(MidiOut, "31");
         put(Sleep, "32");
+        put(MidiOutSync, "33");
         put(PrintIntHex, "34");
         put(PrintIntBinary, "35");
         put(PrintIntUnsigned, "36");

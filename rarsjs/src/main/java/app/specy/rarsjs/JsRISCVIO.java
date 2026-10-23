@@ -248,6 +248,11 @@ public class JsRISCVIO extends RISCVIO {
     }
 
     @Override
+    public void midiOut(int pitch, int duration, int instrument, int volume) {
+        callHandler("midiOut", JSNumber.valueOf(pitch), JSNumber.valueOf(duration), JSNumber.valueOf(instrument), JSNumber.valueOf(volume));
+    }
+
+    @Override
     public double time() {
         return callDoubleHandler("time");
     }

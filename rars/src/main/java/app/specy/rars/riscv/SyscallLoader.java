@@ -102,6 +102,8 @@ public class SyscallLoader {
         add(new SyscallSbrk());
         add(new SyscallRuntimeSbrk());
         add(new SyscallSleep());
+        add(new SyscallMidiOut());
+        add(new SyscallMidiOutSync());
         add(new SyscallTime());
 
         add(new SyscallGetCWD());

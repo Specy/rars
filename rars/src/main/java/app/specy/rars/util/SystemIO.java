@@ -138,6 +138,14 @@ public class SystemIO {
     }
 
     /**
+     * Implements syscalls to play a MIDI tone (default 31, and 33, which then sleeps for its
+     * duration). The arguments arrive already in range.
+     */
+    public static void midiOut(int pitch, int duration, int instrument, int volume) {
+        io.midiOut(pitch, duration, instrument, volume);
+    }
+
+    /**
      * Program time in milliseconds, for the time syscall (default 30). It comes from the IO
      * environment, not from the host clock, so a scripted run can substitute a virtual clock.
      */

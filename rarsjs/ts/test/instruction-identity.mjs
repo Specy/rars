@@ -28,7 +28,7 @@ dispatch:
 ecall
 ret
 `
-const faultSource = text(`li a7, 31
+const faultSource = text(`li a7, 99
 ecall`)
 const randomSource = text(`li a0, 0
 li a7, 41

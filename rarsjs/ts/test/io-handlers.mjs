@@ -7,7 +7,8 @@ import { RISCV, registerHandlers, unimplementedHandler } from '../dist/index.mjs
 const HANDLER_NAMES = [
     'openFile', 'closeFile', 'writeFile', 'readFile', 'confirm', 'inputDialog',
     'outputDialog', 'readDouble', 'readFloat', 'readInt', 'readString', 'readChar',
-    'printString', 'sleep', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr', 'randomSeed',
+    'printString', 'sleep', 'midiOut', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr',
+    'randomSeed',
 ]
 
 /** Runs a program with only `handlers` implemented; any other handler call fails the run. */

@@ -8,7 +8,8 @@ import { RISCV, RISCV_REGISTERS, registerHandlers, unimplementedHandler } from '
 const HANDLER_NAMES = [
     'openFile', 'closeFile', 'writeFile', 'readFile', 'confirm', 'inputDialog',
     'outputDialog', 'readDouble', 'readFloat', 'readInt', 'readString', 'readChar',
-    'printString', 'sleep', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr', 'randomSeed',
+    'printString', 'sleep', 'midiOut', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr',
+    'randomSeed',
 ]
 const STACK_POINTER = 0x7fffeffc
 const STACK_BASE = 0x7ffffffc

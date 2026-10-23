@@ -12,7 +12,8 @@ assert.match(vectors.java, /^21\./, 'the vectors come from Java 21')
 const HANDLER_NAMES = [
     'openFile', 'closeFile', 'writeFile', 'readFile', 'confirm', 'inputDialog',
     'outputDialog', 'readDouble', 'readFloat', 'readInt', 'readString', 'readChar',
-    'printString', 'sleep', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr', 'randomSeed',
+    'printString', 'sleep', 'midiOut', 'time', 'stdIn', 'seekFile', 'stdOut', 'stdErr',
+    'randomSeed',
 ]
 
 function assemble(source) {

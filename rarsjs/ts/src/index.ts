@@ -276,6 +276,15 @@ export type HandlerMap = {
      */
     sleep: {in: [milliseconds: number], out: void}
     /**
+     * Syscalls 31 and 33: play a MIDI tone for `duration` milliseconds. `pitch` (60 is middle C),
+     * `instrument` (a General MIDI program, 0 is acoustic grand piano) and `volume` run from 0 to
+     * 127. The syscall has already put each argument outside its range back to RARS's default: 60,
+     * 1000, 0 and 100. Start the tone and return without waiting for it to end; return a promise to
+     * hold the program until it settles, while the sound loads for example. Syscall 33 is `midiOut`
+     * followed by `sleep` for the same duration.
+     */
+    midiOut: {in: [pitch: number, duration: number, instrument: number, volume: number], out: void}
+    /**
      * Syscall 30, and every instruction that reads the `time` CSR (or `timeh`, its upper half on
      * RV32): the program time in milliseconds. The syscall splits it into a0 (low word) and a1 (high
      * word). Answer with `Date.now()` for a live run, or with a virtual clock for a scripted one, so
