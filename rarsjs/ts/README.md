@@ -21,7 +21,7 @@ const core = makeRiscVFromFiles(files, 'main.s', { assemblerProfile: 'gnu-compil
 
 Omission selects `rars`. `RISCV.assemblerProfiles` lists supported profiles; every present invalid profile throws. GNU compiler v1 provides independent named sections, explicit data alignment, exact eight-byte data, byte-valued string escapes, bounded expressions/aliases, numeric labels, and absolute/PC-relative address fixups. It uses fixed instruction expansions and rejects unsupported directives, ISA attributes, relocations and unresolved runtime helpers. Units link with ld semantics: global and weak symbols (an undefined weak reference is zero), COMDAT groups (the first copy is kept), and `.init_array`/`.fini_array` with ld-provided `__init_array_start`/`__init_array_end` bounds. Global labels enter the global symbol table, so the start label finds them. It does not load or link ELF, compressed/vector instructions, TLS or a standard library. RARS retains its existing educational syntax and macros.
 
-`getAddressOfLabel(name)` returns a defined label/alias address after successful assembly, or `-1` when absent. Profile state is per program; width, memory and execution state retain the existing single-instance constraint.
+`getAddressOfLabel(name)` returns a defined label/alias address after successful assembly, or `-1` when absent. Profile state and width (`is64Bit`) are per program; memory and execution state retain the existing single-instance constraint.
 
 Floating point literals are read as Java 21 reads them, correctly rounded: `.double` stores
 `Double.parseDouble` of its token and `.float` that double rounded to a float, as RARS does, while
@@ -48,7 +48,7 @@ const files = {
   `,
 } as const;
 
-// RISCV.setIs64Bit(true); // Set to 64-bit mode if needed
+// pass { is64Bit: true } as the third argument for RV64
 const riscvSimulator: JsRiscV = makeRiscVFromFiles(files, 'src/main.asm');
 
 riscvSimulator.assemble();
@@ -367,7 +367,7 @@ next `initialize` stores them again over anything the program wrote on them. The
 least 16 bytes above the initial stack pointer: 4,080 bytes in all (`RISCV.programArgumentsSpace()`)
 for the strings and the array together. `setProgramArguments` throws an `Error` with a sentence for
 the person, and keeps the `argv` it had, for more than 1,024 words after `argv[0]`, a word with a
-NUL, or more than fits at the current width (`Arguments take 4,084 bytes with the program name and
+NUL, or more than fits at the program's width (`Arguments take 4,084 bytes with the program name and
 argv; RISC-V programs have 4,080 bytes for them`); `RISCV.checkProgramArguments(argv, is64Bit?)`
 throws the same without a program, at the width it names or else the one `setIs64Bit` set. An empty array stores nothing, as before
 `setProgramArguments` is called: `a0` and `a1` start at 0.
@@ -423,14 +423,14 @@ riscvSimulator.registerHandler("midiOut", () => {});
 
 Provides static methods to initialize and create simulator instances.
 
-* `makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string): JsRiscV`
-  Creates a simulator from a snapshot of a virtual source tree and its entry file. Source paths are canonical, root-relative POSIX paths. The factory is also available as `RISCV.makeRiscVFromFiles` and initializes the simulation environment when needed.
+* `makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string, options?: AssemblyOptions): JsRiscV`
+  Creates a simulator from a snapshot of a virtual source tree and its entry file. `options.is64Bit` makes it RV64 (`true`) or RV32 (`false`), and the simulator keeps that width whatever another simulator or `setIs64Bit` changes afterwards; left out, it takes the width `setIs64Bit` set last. Source paths are canonical, root-relative POSIX paths. The factory is also available as `RISCV.makeRiscVFromFiles` and initializes the simulation environment when needed.
 * `RISCV.initializeRISCV(): void`
   Initializes the core RISC-V simulation environment. Called internally by `makeRiscVFromFiles`, but can be called explicitly if needed.
 * `RISCV.getInstructionSet(): JsInstruction[]`
   Returns an array of objects, each describing one form of a supported RISC-V instruction at the current width (name, example, description, tokens). Several forms can share a name. `getIsPseudo()` is true when the form is a pseudo-instruction, which the assembler expands into one or more basic instructions, and `getExpansion()` returns their templates in order: `la t1,label` gives `["auipc RG1, PCH2", "addi RG1, RG1, PCL2"]`, and a basic instruction gives `[]`. A template names the source operands by token position, where the operator is token 0 and parentheses count but commas do not: `RG1` is the register in token 1, `VH2` and `VL2` the upper 20 and lower 12 bits of the value in token 2, `PCH2` and `PCL2` those of the label in token 2 as an offset from the pseudo-instruction, and `LAB` the label itself; the header of `PseudoOps.java` lists the placeholders. `getIsRv64Only()` is true when RV32 has no form with the same name and operand types; a form that only widens an immediate, such as `slli t1,t2,33` with its 6-bit shift amount, is not RV64 only. All three are methods, not properties.
 * `RISCV.setIs64Bit(is64Bit: boolean): void`
-  Sets the simulator to operate in 32-bit or 64-bit mode. This affects the instruction set.
+  Sets the module's width, 32-bit or 64-bit: the one `getInstructionSet` and `analyzeGnuUnit` read, and the one a simulator made without the `is64Bit` option takes. A simulator keeps the width it was made with, so this does not change what one already made runs at.
 * `RISCV.checkProgramArguments(argv: string[], is64Bit?: boolean): void` and `RISCV.programArgumentsSpace(): number`
   Throw the error `setProgramArguments` would throw for `argv` at a width (the current one by default), and give the bytes argv may take. See [Program arguments](#program-arguments).
 

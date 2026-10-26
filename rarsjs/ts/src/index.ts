@@ -93,6 +93,14 @@ export type AssemblyOptions = {
     entrySymbol?: string
     /** Libraries searched in order: the first one whose index names a symbol supplies it. */
     libraries?: RuntimeLibrary[]
+    /**
+     * Whether the program is RV64 rather than RV32, which decides what assembles (`ld` is RV64
+     * only), how wide the registers and `argv`'s pointers are, and how arithmetic sign-extends.
+     * Left out, it is the width `RISCV.setIs64Bit` set last. The core keeps it: RARS holds the
+     * width in module state, so the core puts its own back whenever it assembles, initializes or
+     * runs, and a core of the other width made in between does not change what this one runs at.
+     */
+    is64Bit?: boolean
 }
 
 /** The globals one GNU compiler unit defines and the ones it uses without defining. */
@@ -421,6 +429,11 @@ export class RISCV {
     public static getInstructionSet(){
         return backend.getInstructionSet() as JsInstruction[]
     }
+    /**
+     * Sets the module's width: the one `getInstructionSet` and `analyzeGnuUnit` read, and the one a
+     * core made without `AssemblyOptions.is64Bit` takes. A core keeps the width it was made with,
+     * so this does not change what one already made runs at.
+     */
     public static setIs64Bit(is64Bit: boolean) {
         RISCV.initializeRISCV()
         backend.setIs64Bit(is64Bit)
@@ -1331,7 +1344,7 @@ export interface JsRiscV {
  * snapshotted by this call; only the entry file and files reached through `.include` are assembled.
  * @param files Source text keyed by canonical source path.
  * @param entryFile Canonical path of the file from which include expansion starts.
- * @param options The assembler profile, the entry symbol and the libraries to link; see `AssemblyOptions`.
+ * @param options The assembler profile, the entry symbol, the libraries to link and the width; see `AssemblyOptions`.
  * @returns A new `JsRiscV` object.
  */
 export function makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string, options?: AssemblyOptions): JsRiscV {
@@ -1378,6 +1391,10 @@ export function makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string, opt
     if (typeof entryFile !== 'string') {
         throw new TypeError('Entry file must be a string')
     }
+    const width = options && Object.hasOwn(options, 'is64Bit') ? options.is64Bit : undefined
+    if (width !== undefined && typeof width !== 'boolean') {
+        throw new TypeError('is64Bit must be a boolean')
+    }
     const entries = Object.entries(files)
     for (const [sourcePath, source] of entries) {
         if (typeof source !== 'string') {
@@ -1396,6 +1413,7 @@ export function makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string, opt
         indexSymbols,
         indexMembers,
         resolveWeak,
+        width ?? backend.is64Bit(),
     ) as JsRiscV
     // the Java side reads each word as a string, so anything else is refused here, by name
     const setProgramArguments = core.setProgramArguments

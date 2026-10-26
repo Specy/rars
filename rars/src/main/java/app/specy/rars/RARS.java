@@ -92,17 +92,28 @@ public class RARS {
         this.entrySymbol = entrySymbol == null || entrySymbol.isEmpty() ? null : entrySymbol;
     }
 
-    private RARS(String entryFile, MemoryFileSystem files, app.specy.rars.assembler.AssemblerProfile profile) {
+    /** Whether this program assembles and runs as RV64 rather than RV32, see {@link #useOwnWidth()}. */
+    private final boolean is64Bit;
+
+    private RARS(String entryFile, MemoryFileSystem files, app.specy.rars.assembler.AssemblerProfile profile,
+                 boolean is64Bit) {
         this.entryFile = entryFile;
         this.files = files;
         this.assemblerProfile = java.util.Objects.requireNonNull(profile);
+        this.is64Bit = is64Bit;
     }
 
     public static RARS fromFs(String entryFile, RISCVFileSystem sourceFiles) {
         return fromFs(entryFile, sourceFiles, app.specy.rars.assembler.AssemblerProfile.RARS);
     }
 
+    /** A program at the width {@link #setIs64Bit(boolean)} set last. */
     public static RARS fromFs(String entryFile, RISCVFileSystem sourceFiles, app.specy.rars.assembler.AssemblerProfile profile) {
+        return fromFs(entryFile, sourceFiles, profile, Globals.is64Bit());
+    }
+
+    public static RARS fromFs(String entryFile, RISCVFileSystem sourceFiles, app.specy.rars.assembler.AssemblerProfile profile,
+                              boolean is64Bit) {
         SourcePath.requireCanonical(entryFile);
         if (sourceFiles == null) {
             throw new IllegalArgumentException("Source set must be an object");
@@ -126,7 +137,23 @@ public class RARS {
         if (!paths.contains(entryFile)) {
             throw new IllegalArgumentException("Entry file is not present in the source set: " + entryFile);
         }
-        return new RARS(entryFile, snapshot, profile);
+        return new RARS(entryFile, snapshot, profile, is64Bit);
+    }
+
+    /** Whether this program assembles and runs as RV64, whatever width the module is at now. */
+    public boolean isProgram64Bit() {
+        return is64Bit;
+    }
+
+    /**
+     * Puts the module at this program's width. RARS keeps the width in module state - the
+     * instruction set, the RV64 setting, and the instructions that read it as they run - so a
+     * program puts its own back before it assembles, initializes or runs, whatever width another
+     * program or {@link #setIs64Bit(boolean)} chose in between. Switching rebuilds the instruction
+     * set, so it is done only when the width differs.
+     */
+    private void useOwnWidth() {
+        if (Globals.is64Bit() != is64Bit) Globals.setIs64Bit(is64Bit);
     }
 
     public static void initializeRISCV() {
@@ -134,6 +161,7 @@ public class RARS {
     }
 
     public ErrorList assemble() throws AssemblyException {
+        useOwnWidth();
         assemblyAttempted = true;
         assembled = false;
         stopReason = null;
@@ -153,6 +181,7 @@ public class RARS {
 
     public void initialize(boolean startAtMain) {
         requireAssembled();
+        useOwnWidth();
         main.getBackStepper().clearHistory();
         RegisterFile.resetRegisters();
         FloatingPointRegisterFile.resetRegisters();
@@ -214,6 +243,7 @@ public class RARS {
 
     private Simulator.Reason run(Run body) throws SimulationException {
         requireAssembled();
+        useOwnWidth();
         lastRunInstructionCount = 0;
         if (ProgramExit.hasExited()) {
             // An exit ends the program: what follows the ecall is not run, as RARS does not

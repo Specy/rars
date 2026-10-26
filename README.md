@@ -46,7 +46,7 @@ const files = {
   `,
 } as const;
 
-// RISCV.setIs64Bit(true); // Set to 64-bit mode if needed
+// pass { is64Bit: true } as the third argument for RV64
 const riscvSimulator: JsRiscV = makeRiscVFromFiles(files, 'src/main.asm');
 
 riscvSimulator.assemble();
@@ -328,14 +328,14 @@ riscvSimulator.registerHandler("midiOut", () => {});
 
 Provides static methods to initialize and create simulator instances.
 
-* `makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string): JsRiscV`
-  Creates a simulator from a snapshot of a virtual source tree and its entry file. Source paths are canonical, root-relative POSIX paths. The factory is also available as `RISCV.makeRiscVFromFiles` and initializes the simulation environment when needed.
+* `makeRiscVFromFiles(files: RISCVSourceSet, entryFile: string, options?: AssemblyOptions): JsRiscV`
+  Creates a simulator from a snapshot of a virtual source tree and its entry file. `options.is64Bit` makes it RV64 (`true`) or RV32 (`false`), and the simulator keeps that width whatever another simulator or `setIs64Bit` changes afterwards; left out, it takes the width `setIs64Bit` set last. Source paths are canonical, root-relative POSIX paths. The factory is also available as `RISCV.makeRiscVFromFiles` and initializes the simulation environment when needed.
 * `RISCV.initializeRISCV(): void`
   Initializes the core RISC-V simulation environment. Called internally by `makeRiscVFromFiles`, but can be called explicitly if needed.
 * `RISCV.getInstructionSet(): JsInstruction[]`
   Returns an array of objects, each describing one form of a supported RISC-V instruction at the current width (name, example, description, tokens). Several forms can share a name. `getIsPseudo()` is true when the form is a pseudo-instruction, which the assembler expands into one or more basic instructions, and `getExpansion()` returns their templates in order: `la t1,label` gives `["auipc RG1, PCH2", "addi RG1, RG1, PCL2"]`, and a basic instruction gives `[]`. A template names the source operands by token position, where the operator is token 0 and parentheses count but commas do not: `RG1` is the register in token 1, `VH2` and `VL2` the upper 20 and lower 12 bits of the value in token 2, `PCH2` and `PCL2` those of the label in token 2 as an offset from the pseudo-instruction, and `LAB` the label itself; the header of `PseudoOps.java` lists the placeholders. `getIsRv64Only()` is true when RV32 has no form with the same name and operand types; a form that only widens an immediate, such as `slli t1,t2,33` with its 6-bit shift amount, is not RV64 only. All three are methods, not properties.
 * `RISCV.setIs64Bit(is64Bit: boolean): void`
-  Sets the simulator to operate in 32-bit or 64-bit mode. This affects the instruction set.
+  Sets the module's width, 32-bit or 64-bit: the one `getInstructionSet` and `analyzeGnuUnit` read, and the one a simulator made without the `is64Bit` option takes. A simulator keeps the width it was made with, so this does not change what one already made runs at.
 
 ### `JsRiscv` Interface
 

@@ -266,6 +266,32 @@ assert.ok(RISCV.getInstructionSet().length > 0, 'instruction set should not be e
     console.log(`ok - instruction forms: ${pseudo} of ${rv32.length} RV32 forms are pseudo-instructions, slli/srli/srai not RV64 only`)
 }
 
+// A core keeps the width it was made with. RARS holds the width in module state, so the core puts
+// its own back whenever it assembles, initializes or runs: a core of the other width made in
+// between, or a switch of the module's width, changes nothing it does.
+{
+    const WIDE = '\n    .text\nmain:\n    li t0, 1\n    slli t1, t0, 33\n    addw t2, t0, t0\n    li a7, 10\n    ecall\n'
+    RISCV.setIs64Bit(false)
+    const wide = makeRiscVFromFiles({ 'main.asm': WIDE }, 'main.asm', { is64Bit: true })
+    registerHandlers(wide, Object.fromEntries(HANDLER_NAMES.map(name => [name, unimplementedHandler(name)])))
+    assert.equal(RISCV.is64Bit(), false, 'making a core leaves the module at its width')
+    const narrow = makeRiscVFromFiles({ 'main.asm': WIDE }, 'main.asm', { is64Bit: false })
+    const wideAssembled = wide.assemble()
+    assert.equal(wideAssembled.hasErrors, false, `addw assembles on the RV64 core: ${wideAssembled.report}`)
+    assert.equal(narrow.assemble().hasErrors, true, 'and not on the RV32 one made beside it')
+    // the RV32 core's assembly left the module at RV32 and cleared the memory every core shares,
+    // so the RV64 one assembles again, and a switch between that and its run changes nothing
+    wide.assemble()
+    wide.initialize(true)
+    RISCV.setIs64Bit(false)
+    await wide.simulate()
+    const wideRegisters = Array.from(wide.getRegistersValuesLong(), value => BigInt(value))
+    assert.equal(wideRegisters[RISCV_REGISTERS.indexOf('t1')], 1n << 33n, 'slli by 33 runs at 64 bits')
+    assert.equal(RISCV.is64Bit(), true, 'the run put the module at the core\'s width')
+    assert.throws(() => makeRiscVFromFiles({ 'main.asm': WIDE }, 'main.asm', { is64Bit: 1 }), /is64Bit must be a boolean/)
+    console.log('ok - a core keeps the width it was made with')
+}
+
 // Multi-file construction: one immutable virtual source tree, rooted at the entry file.
 RISCV.setIs64Bit(false)
 const projectFiles = {

@@ -61,21 +61,23 @@ public class JsRiscV {
 
     @JSExport
     public static JsRiscV makeRiscVFromFilesWithProfile(String[] sourcePaths, String[] sources, String entryFile, String profile) {
+        RARS.initializeRISCV(); // the current width is a setting, read once RARS is initialized
         return makeRiscVFromFilesWithOptions(sourcePaths, sources, entryFile, profile, "",
-                new String[0], new String[0], new String[0], new String[0], new String[0]);
+                new String[0], new String[0], new String[0], new String[0], new String[0], RARS.is64Bit());
     }
 
     /**
      * The factory with every option: the assembler profile, the global execution starts at
-     * (empty for the global main), and one library flattened into members and an index naming
-     * the member that defines each symbol.
+     * (empty for the global main), one library flattened into members and an index naming the
+     * member that defines each symbol, and the width the program assembles and runs at, which it
+     * keeps whatever width the module is switched to afterwards.
      */
     @JSExport
     public static JsRiscV makeRiscVFromFilesWithOptions(String[] sourcePaths, String[] sources, String entryFile,
                                                         String profile, String entrySymbol,
                                                         String[] memberPaths, String[] memberSources,
                                                         String[] indexSymbols, String[] indexMembers,
-                                                        String[] resolveWeak) {
+                                                        String[] resolveWeak, boolean is64Bit) {
         JsRiscV.getIOHandler(); // Ensure that the IO handler is initialized
         if (sourcePaths == null || sources == null || sourcePaths.length != sources.length) {
             throw new IllegalArgumentException("Source paths and contents must have the same length");
@@ -84,7 +86,7 @@ public class JsRiscV {
         for (int i = 0; i < sourcePaths.length; i++) {
             files.write(sourcePaths[i], sources[i]);
         }
-        RARS rars = RARS.fromFs(entryFile, files, app.specy.rars.assembler.AssemblerProfile.parse(profile));
+        RARS rars = RARS.fromFs(entryFile, files, app.specy.rars.assembler.AssemblerProfile.parse(profile), is64Bit);
         app.specy.rars.assembler.RuntimeLibrary library = memberPaths == null || memberPaths.length == 0 ? null
                 : new app.specy.rars.assembler.RuntimeLibrary(memberPaths, memberSources, indexSymbols, indexMembers, resolveWeak);
         rars.setLinkInputs(library, entrySymbol);
@@ -192,15 +194,15 @@ public class JsRiscV {
     /**
      * The program's argv, {@code argv[0]} (its name) included, which every later
      * {@link #initialize(boolean)} stores above the stack with {@code a0} = argc and {@code a1} =
-     * argv, until it is set again; an empty array stores none. Pointers are as wide as the width
-     * {@code initialize} runs under. See {@link ProgramArgumentsAboveStack} for the layout.
+     * argv, until it is set again; an empty array stores none. Pointers are as wide as the
+     * program's width. See {@link ProgramArgumentsAboveStack} for the layout.
      *
      * @throws IllegalArgumentException with a sentence for the person when the words cannot be
      *                                  stored: too many, a NUL, or more than fits above the stack
      */
     @JSExport
     public void setProgramArguments(String[] argv) {
-        String problem = ProgramArgumentsAboveStack.problem(argv);
+        String problem = ProgramArgumentsAboveStack.problem(argv, this.main.isProgram64Bit());
         if (problem != null) throw new IllegalArgumentException(problem);
         this.programArguments = argv.clone();
     }
