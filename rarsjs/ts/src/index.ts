@@ -564,7 +564,7 @@ export enum BackStepAction {
     /**
      * A random service (40 to 44) advanced or reseeded generator `param1`: undoing it puts the
      * generator back, so that stepping the service again draws the same number. The generator's
-     * state is the simulator's own, so `param2`, `oldValue` and `newValue` are 0.
+     * state is the simulator's own, so `oldValue` and `newValue` are `'0'`.
      */
     RANDOM_STREAM_RESTORE,
     /** Internal heap and stack extent restores; no displayed mutation. */
@@ -583,23 +583,23 @@ export interface JsBackStep {
     readonly action: BackStepAction;
 
     /**
-     * Information about the action
+     * What the action restores into: the address of a memory restore, the register number of a
+     * register or floating point restore, the CSR number of a control and status register restore,
+     * the address `PC_RESTORE` puts back, the generator of `RANDOM_STREAM_RESTORE`, whether the
+     * program had exited for `EXIT_RESTORE`, and the heap break `HEAP_RESTORE` puts back.
+     * Unsigned, so an address at or above `0x80000000` (the memory-mapped devices) reads as the
+     * address it is.
      */
     readonly param1: number;
-
-    /**
-     * Information about the action. A 64 bit value is truncated to 32 bits here, as it always has
-     * been; read `oldValue` for the whole of it.
-     */
-    readonly param2: number;
 
     /**
      * The value this step replaced, as the simulator saw it at the write, whole and untruncated.
      *
      * Every value of this target is 64 bits wide, which no JS number holds, so it is a **signed
-     * decimal string**, the shape `JsPokeRegisterWrite` and `getRegistersValuesLong` already use:
-     * read it with `BigInt(step.oldValue)`, and with `BigInt.asUintN(64, BigInt(step.oldValue))`
-     * for the unsigned form.
+     * decimal string**, the shape `JsPokeRegisterWrite` and `getRegistersValuesLong` already use,
+     * and the one `@specy/mips` reports its back steps in, so that one reading serves both: read it
+     * with `BigInt(step.oldValue)`, and with `BigInt.asUintN(64, BigInt(step.oldValue))` for the
+     * unsigned form.
      *
      * - `REGISTER_RESTORE`, `FLOATING_POINT_REGISTER_RESTORE`,
      *   `CONTROL_AND_STATUS_REGISTER_RESTORE`, `CONTROL_AND_STATUS_REGISTER_BACKDOOR`: the whole
@@ -607,9 +607,9 @@ export interface JsBackStep {
      * - `MEMORY_RESTORE_RAW_WORD`, `MEMORY_RESTORE_WORD`, `MEMORY_RESTORE_DOUBLE_WORD`,
      *   `MEMORY_RESTORE_HALF`, `MEMORY_RESTORE_BYTE`: the bytes the write replaced, at the width it
      *   was made, in the low order bits.
-     * - `PC_RESTORE`: the address the restore puts back - the same value as `param1`, which is
-     *   where this action has always kept it, its `param2` being unused and 0.
+     * - `PC_RESTORE`: the address the restore puts back, the same as `param1`.
      * - `EXIT_RESTORE`: the exit code the exit replaced.
+     * - `HEAP_RESTORE`: `'0'`, its value being `param1`.
      * - `'0'` for `CONTROL_AND_STATUS_COUNTERS_DECREMENT`, `DO_NOTHING` and `POKE`, which replace
      *   no single value; a Poke reports both sides of everything it wrote through its own `writes`.
      *   Also for `RANDOM_STREAM_RESTORE`, whose generator state is the simulator's own.

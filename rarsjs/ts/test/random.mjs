@@ -194,7 +194,7 @@ main:   li    a0, 1
     const restores = Array.from(riscv.getUndoGroups()).flatMap(group =>
         group.steps.filter(step => step.action === BackStepAction.RANDOM_STREAM_RESTORE))
     assert.deepEqual(restores.map(step => step.param1), [1, 1, 2, 2, 1, 2, 1, 1])
-    assert.ok(restores.every(step => step.param2 === 0 && step.oldValue === '0' && step.newValue === '0'),
+    assert.ok(restores.every(step => step.oldValue === '0' && step.newValue === '0'),
         'the state is not reported')
     assert.deepEqual(Array.from(riscv.getUndoGroupsUpTo(1))[0].steps.map(step => step.action), [BackStepAction.EXIT_RESTORE])
 }

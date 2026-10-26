@@ -599,7 +599,7 @@ public class JsRiscV {
      * pc -1. Use getUndoGroups() to read the history the way undo() pops it.
      *
      * Every step that restores a value reports both sides of the write it undoes, whole, as the
-     * signed decimal strings oldValue and newValue; param1 and param2 are unchanged.
+     * signed decimal strings oldValue and newValue; param1 is unsigned.
      */
     @JSExport
     public JSArray<JSObject> getUndoStack() {

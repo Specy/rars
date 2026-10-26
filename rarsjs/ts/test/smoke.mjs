@@ -1138,7 +1138,7 @@ console.log('ok - pokes: transaction, one entry per poke, grouped history, undo'
 // ---------------------------------------------------------------------------
 // Written values: every back step that restores a value reports what the write left behind beside
 // what it replaced, both as the simulator saw them at the store, and both whole - a 64 bit value
-// crosses as a signed decimal string, where `param2` truncates it to 32 bits.
+// crosses as a signed decimal string, the shape @specy/mips reports its back steps in too.
 // ---------------------------------------------------------------------------
 
 const WRITTEN_SOURCE = `
@@ -1285,8 +1285,8 @@ const only = (steps, action) => {
         'beside the address the instruction set: the jump target, two instructions on')
 }
 
-// 2. The values cross without loss: a 64 bit register or an `sd` truncates in `param2` and does not
-// in `oldValue`/`newValue`.
+// 2. The values cross without loss: a 64 bit register or an `sd` keeps all 64 bits in
+// `oldValue`/`newValue`.
 {
     RISCV.setIs64Bit(true)
     const program = makeWrittenProgram(`
@@ -1315,18 +1315,13 @@ main:
     assert.ok(written, 'the last write to t0 reports the whole 64 bit value it left')
     assert.equal(BigInt.asUintN(64, BigInt(written.newValue)), 0xFEDCBA9876543210n,
         'read back with BigInt, exactly')
-    assert.equal(written.param2 | 0, written.param2,
-        'param2 is still the 32 bit int it always was')
+    assert.equal('param2' in written, false, 'no field truncates it to 32 bits')
 
     const dword = only(stack, BackStepAction.MEMORY_RESTORE_DOUBLE_WORD)
     assert.equal(dword.oldValue, String(0x1122334455667788n),
         'an `sd` reports all 64 bits of what it replaced')
     assert.equal(BigInt.asUintN(64, BigInt(dword.newValue)), 0xFEDCBA9876543210n,
         'and all 64 bits of what it wrote')
-    assert.equal(dword.param2, 0x55667788 | 0,
-        'where param2 still hands over the low half alone, as it always has')
-    assert.notEqual(dword.param2, Number(dword.oldValue),
-        'which is exactly the truncation oldValue exists to undo')
 
     // The time counter reading is the other 64 bit value on this stack, and it is a write that
     // lands in the reading instruction's entry like any other, so it reports both sides: the
@@ -1334,7 +1329,7 @@ main:
     const reading = only(stack, BackStepAction.CONTROL_AND_STATUS_REGISTER_BACKDOOR)
     assert.equal(reading.param1, 0xC01, 'the time counter')
     assert.equal(reading.oldValue, '0', 'it reads 0 until the program reads it')
-    assert.equal(reading.newValue, String(1_700_000_000_123), 'and then the whole reading, unlike param2')
+    assert.equal(reading.newValue, String(1_700_000_000_123), 'and then the whole reading')
     assert.equal(BigInt.asIntN(32, BigInt(reading.newValue)), BigInt.asIntN(32, 1_700_000_000_123n))
     assert.equal(BigInt(program.getRegistersValuesLong()[RISCV_REGISTERS.indexOf('t2')]), 1_700_000_000_123n)
     RISCV.setIs64Bit(false)
@@ -1384,8 +1379,8 @@ loop:
     assert.equal(BigInt(registers[RISCV_REGISTERS.indexOf('t2')]), 2n, 'and rdtimeh the high half')
 }
 
-// 3. The shape is additive: both fields are on every step of both read APIs, the existing fields are
-// untouched, and a Poke's own writes are unchanged.
+// 3. Both values are on every step of both read APIs, beside the fields @specy/mips reports too, and
+// a Poke's own writes are unchanged.
 {
     RISCV.setIs64Bit(false)
     const program = makeWrittenProgram()
@@ -1398,7 +1393,7 @@ loop:
         assert.ok(isValue(step.oldValue), `oldValue must be a signed decimal string, got ${step.oldValue}`)
         assert.ok(isValue(step.newValue), `newValue must be a signed decimal string, got ${step.newValue}`)
         assert.equal(typeof step.param1, 'number')
-        assert.equal(typeof step.param2, 'number')
+        assert.ok(step.param1 >= 0, 'param1 is unsigned')
         assert.equal(typeof step.pc, 'number')
         assert.equal(typeof step.isPoke, 'boolean')
     }
@@ -1443,6 +1438,26 @@ loop:
     program.undo()
     assert.equal(program.getRegisterValue('t2'), 0)
     assert.deepEqual(Array.from(program.readMemoryBytes(WRITTEN_DATA, 2)), [0x44, 0x33])
+}
+
+// 3c. An address at or above 0x80000000, a memory-mapped device's, crosses unsigned, as the address
+// it is rather than the negative int Java holds it in.
+{
+    RISCV.setIs64Bit(false)
+    const program = makeWrittenProgram(`
+    .text
+    .globl main
+main:
+    lui  t0, 0xffff0
+    li   t1, 0x41
+    sw   t1, 12(t0)
+    li   a7, 10
+    ecall
+`)
+    await runToEnd(program)
+    const store = only(Array.from(program.getUndoStack()), BackStepAction.MEMORY_RESTORE_WORD)
+    assert.equal(store.param1, 0xffff000c, 'the transmitter data register, unsigned')
+    assert.equal(store.newValue, String(0x41))
 }
 
 // 4. The value is captured at the store: a write records the one entry it always did, with no

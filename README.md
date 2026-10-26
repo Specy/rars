@@ -372,7 +372,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getRegistersValues(): number[]`: Returns an array of all general-purpose register values. The order might be implementation-defined but usually corresponds to register numbers 0-31.
 * `getConditionFlags(): number[]`: Gets the 8 condition flags (if applicable, typically related to floating-point or custom extensions).
 * `registerHandler<T extends HandlerName>(name: T, handler: (...args: HandlerMap[T]['in']) => HandlerMap[T]['out'] | Promise<HandlerMap[T]['out']>): void`: Registers a handler function for a specific event (e.g., syscalls). See `HandlerName`, `HandlerMap` and [IO handlers](#io-handlers) for details.
-* `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history.
+* `getUndoStack(): JsBackStep[]`: Returns the undo stack, an array of `JsBackStep` objects representing simulation history. Each step reports the value the write replaced (`oldValue`) beside the value it wrote (`newValue`), as signed decimal strings, and an address in `param1` unsigned.
 * `readMemoryBytes(address: number, length: number): number[]`: Reads `length` bytes from memory starting at `address`. Returns an array of byte values.
 * `setMemoryBytes(address: number, bytes: number[]): void`: Writes an array of `bytes` to memory starting at `address`.
 * `getNextStatement(): JsProgramStatement | null`: Returns the next `JsProgramStatement` to be executed, or `null` once the program has terminated.
