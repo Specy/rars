@@ -1,6 +1,7 @@
 // The WebAssembly GC runtime of TeaVM 0.15.0 (org/teavm/backend/wasm/wasm-gc-runtime.js in the
-// teavm-core jar), Apache License 2.0, copied unchanged: the Maven plugin does not emit it. Update it
-// together with `teavm.version` in pom.xml.
+// teavm-core jar), Apache License 2.0, copied because the Maven plugin does not emit it. Update it
+// together with `teavm.version` in pom.xml. One change: `/* @vite-ignore */` in the two `import()`
+// calls of addresses known only at run time, which Vite otherwise warns it cannot analyze.
 "use strict";
 (() => {
   var __create = Object.create;
@@ -874,7 +875,7 @@
         names = namesByModule;
         propertiesToAdd[module] = names;
         promises.push((async () => {
-          const moduleInstance = await import(module);
+          const moduleInstance = await import(/* @vite-ignore */ module);
           const importsByModule = {};
           for (const n of namesByModule) {
             const importedName = n === "__self__" ? moduleInstance : moduleInstance[n];
@@ -1156,7 +1157,7 @@
     return Promise.all(keysValues.map(async ([key, { pathToJs, pathToWasm }]) => {
       const [response, close] = await openPath(pathToWasm, isNodeJs);
       const [jsLoader, wasmModule] = await Promise.all([
-        import(pathToJs),
+        import(/* @vite-ignore */ pathToJs),
         WebAssembly.compileStreaming(response)
       ]);
       const result = {
