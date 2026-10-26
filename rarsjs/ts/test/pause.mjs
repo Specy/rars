@@ -1,4 +1,4 @@
-// A handler ending the run call it runs in with `pause()`, and the instruction count every run call
+// A handler ending the run call it runs in with `pause()`, and the instruction counts every run call
 // reports: what a host needs to end its call where a program's frame ends, at a sleep, and to know
 // how far it got.
 import assert from 'node:assert/strict'
@@ -110,6 +110,29 @@ const NEXT = TEXT + 20
     const failing = core(['main: li t0, 1', '      lw t1, 1(zero)'])
     await assert.rejects(failing.simulate(), (error) => isRuntimeError(error))
     assert.equal(failing.getLastRunInstructionCount(), 2, 'li and the failing lw')
+}
+
+// 7. getInstructionsExecuted counts every call's instructions together, failing ones included, and
+// only grows: each of them is one undo entry, so a host that splits a run into several calls takes
+// the difference across all of them, and undo, initialize and another program leave it alone.
+{
+    const riscv = core(LOOP)
+    const start = riscv.getInstructionsExecuted()
+    assert.equal(await riscv.simulateWithLimit(1000), StopReason.PAUSE)
+    assert.equal(await riscv.simulateWithLimit(3), StopReason.MAX_STEPS)
+    assert.equal(riscv.getInstructionsExecuted() - start, 8, 'both calls, 5 and then 3')
+    assert.equal(riscv.getUndoDepth(), 8, 'one undo entry each')
+    riscv.undo()
+    riscv.initialize(true)
+    assert.equal(riscv.getInstructionsExecuted() - start, 8, 'undo and initialize take nothing back')
+
+    const failing = core(['main: li t0, 1', '      li t2, 2', '      lw t1, 1(zero)'])
+    const before = failing.getInstructionsExecuted()
+    assert.ok(before >= start + 8, 'a new program goes on from the count it found')
+    await failing.step()
+    await assert.rejects(failing.simulate(), (error) => isRuntimeError(error))
+    assert.equal(failing.getInstructionsExecuted() - before, 3, 'the step, then li and the failing lw')
+    assert.equal(failing.getUndoDepth(), 3, 'which is one undo entry each, the failing lw included')
 }
 
 console.log('pause: ok')

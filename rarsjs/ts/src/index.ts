@@ -881,6 +881,16 @@ export interface JsRiscV {
     getLastRunInstructionCount(): number;
 
     /**
+     * How many instructions run calls have executed since the module loaded, the one that exited
+     * or failed included, every core of the module counted together. Each of them is one entry of
+     * the undo history while it records, so the difference across a host's own calls is how many
+     * entries they added, a call that rejected included, which `getLastRunInstructionCount` alone
+     * cannot say for a host that splits one run into several calls. It only grows: `undo`,
+     * `initialize` and assembling another program leave it alone.
+     */
+    getInstructionsExecuted(): number;
+
+    /**
      * Ends the run call in flight after the instruction it is executing. An IO handler is the only
      * host code that runs while a call is in flight, so that is where this is called from: the call
      * then resolves to `PAUSE` once the instruction and its handler have finished, or to

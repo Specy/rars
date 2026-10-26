@@ -240,6 +240,14 @@ public class RARS {
         return lastRunInstructionCount;
     }
 
+    /**
+     * Every instruction a run call has executed since the module loaded, see
+     * {@link Simulator#getInstructionsRun()}: never rewound by undo nor reset by initialize.
+     */
+    public double getInstructionsExecuted() {
+        return Simulator.getInstance().getInstructionsRun();
+    }
+
     /** Ends the run call in flight after its current instruction, see {@link Simulator#pauseAfterInstruction()}. */
     public void pause() {
         Simulator.getInstance().pauseAfterInstruction();

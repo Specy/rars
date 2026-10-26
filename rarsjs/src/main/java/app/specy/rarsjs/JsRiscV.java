@@ -336,6 +336,17 @@ public class JsRiscV {
     }
 
     /**
+     * Every instruction a run call has executed since the module loaded, the one that exited or
+     * failed included, each of them one entry of the undo history while it records. It only grows:
+     * undo, initialize and assembling another program leave it alone, so a host takes the
+     * difference across its calls, a call that rejected included.
+     */
+    @JSExport
+    public double getInstructionsExecuted() {
+        return this.main.getInstructionsExecuted();
+    }
+
+    /**
      * Ends the run call in flight after the instruction it is executing, which is the one whose IO
      * handler calls this: the call resolves to PAUSE, or BREAKPOINT or CLIFF_TERMINATION for the
      * instruction after it. Without a call in flight it does nothing.

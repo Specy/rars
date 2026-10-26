@@ -250,7 +250,11 @@ returns `null`. A program that has exited runs nothing more: every run call reso
 run and 0 otherwise, after exit and after running off the end too; `initialize` resets it and
 undoing the exit puts back the code before it. `getStopReason()` reports the last run call's
 reason, `NONE` after `initialize`, and `getLastRunInstructionCount()` how many instructions it
-executed, the one that exited or failed included.
+executed, the one that exited or failed included. `getInstructionsExecuted()` counts the same
+instructions over every run call since the module loaded and never goes back, not even on `undo()`:
+each of them is one entry of the undo history while it records, so a host that runs a program in
+several calls takes the difference across all of them, a call that rejected included, to know how
+many entries it added.
 
 A handler can end the call it runs in with `pause()`. The call finishes the instruction, handler
 included, and resolves to `PAUSE`, or to `BREAKPOINT` when the next instruction is a breakpoint, or
@@ -352,6 +356,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
 * `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
 * `getLastRunInstructionCount(): number`: How many instructions the last run call executed.
+* `getInstructionsExecuted(): number`: How many instructions run calls have executed since the module loaded; it only grows. See [Running and stopping](#running-and-stopping).
 * `pause(): void`: From a handler, ends the run call in flight after its instruction. See [Running and stopping](#running-and-stopping).
 * `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the
   first page after static data in a `gnu-compiler-v1` program whose static data reaches past it.

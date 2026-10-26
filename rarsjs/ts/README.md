@@ -454,6 +454,7 @@ This interface provides methods to control and interact with a RISC-V simulator 
 * `getProgramArgumentsLayout(): Int32Array`: Where the last `initialize` stored that `argv`: the range, argc, the array and each string's address. See [Program arguments](#program-arguments).
 * `step(): Promise<StopReason>`: Executes a single instruction. See [Running and stopping](#running-and-stopping) for every run call's `StopReason` and `RuntimeError`.
 * `getStopReason(): StopReason`: Why the last run call stopped, `NONE` after `initialize`.
+* `getInstructionsExecuted(): number`: How many instructions run calls have executed since the module loaded, the one that exited or failed included. It only grows, `undo()` included, and each of them is one entry of the undo history while it records, so the difference across a host's calls is how many entries they added.
 * `getHeapStart(): number`: Where the heap, and so sbrk's first block, starts: 0x10040000, or the
   first page after static data in a `gnu-compiler-v1` program whose static data reaches past it.
   See [Memory layout](#memory-layout).
